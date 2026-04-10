@@ -1,0 +1,39 @@
+﻿@using GlassBoard.Services
+@using MudBlazor
+@inject AppContextService ContextService
+@inject NavigationManager Nav
+
+<MudPaper Class="pa-2 mb-4 d-flex align-center gap-4" Elevation="0" Style="background: transparent;">
+    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" />
+    <MudSelect T="string"
+               Label="Ambiente di Lavoro"
+               Value="@ContextService.CurrentEnvironmentName"
+               ValueChanged="OnEnvironmentChanged"
+               Variant="Variant.Outlined"
+               Margin="Margin.Dense"
+               Dense="true"
+               Style="width: 250px; background-color: white;">
+        @foreach (var env in ContextService.GetAvailableEnvironments())
+        {
+            <MudSelectItem Value="@env">@env</MudSelectItem>
+        }
+    </MudSelect>
+
+    <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Size="Size.Small">
+        Utente: <b>@ContextService.CurrentUsername</b>
+    </MudChip>
+</MudPaper>
+
+@code {
+    private void OnEnvironmentChanged(string newEnv)
+    {
+        // Cambia il contesto (DB, User, Password)
+        ContextService.SetTenant(newEnv);
+
+        // Opzionale: Reindirizziamo alla home per forzare un reset completo della UI
+        // Nav.NavigateTo("/", true);
+
+        // Oppure notifichiamo semplicemente lo stato
+        StateHasChanged();
+    }
+}

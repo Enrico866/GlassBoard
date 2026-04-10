@@ -1,0 +1,83 @@
+﻿@using MongoDB.Bson
+@using GlassBoard.Abstractions
+@using static SharedLibrary.Enum.Enums
+
+<MudCard Outlined="true" Class="mt-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Configurazione Accessi</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (AccessList == null || !AccessList.Any())
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Nessuna configurazione di accesso definita.</MudText>
+        }
+        else
+        {
+            <MudTable Items="@AccessList" Dense="true" Hover="true" Elevation="0" Context="access">
+                <HeaderContent>
+                    <MudTh>Indirizzo / Host</MudTh>
+                    <MudTh>Strumenti</MudTh>
+                    <MudTh>Scope</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Address">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Color="Color.Info" />
+                            <MudText Typo="Typo.body2">@access.Address</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Instruments">
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var instId in access.Instruments)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary">
+                                    @GetInstrumentName(instId)
+                                </MudChip>
+                            }
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Scopes">
+                        @foreach (var scope in access.AccessScopes)
+                        {
+                            <MudChip T="int" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                @GetAccessScopeName(scope)
+                            </MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public List<ResourceAccessItem> AccessList { get; set; }
+
+    private string GetInstrumentName(int id)
+    {
+        if (Enum.IsDefined(typeof(InstrumentTypes), id))
+        {
+            return ((InstrumentTypes)id).ToString();
+        }
+        return $"Unknown ({id})";
+    }
+
+    private string GetAccessScopeName(int id)
+    {
+        if (Enum.IsDefined(typeof(AccessScopeTypes), id))
+        {
+            return ((AccessScopeTypes)id).ToString();
+        }
+        return $"Unknown ({id})";
+    }
+    
+
+    public class ResourceAccessItem
+    {
+        public List<int> Instruments { get; set; } = new();
+        public List<int> AccessScopes { get; set; } = new();
+        public string Address { get; set; }
+    }
+}

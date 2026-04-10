@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GlassBoard", "Body\GlassBoard.csproj", "{9B263BA6-0E6D-4970-8796-B6AD2BC78095}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharedLibrary", "SharedLibrary\SharedLibrary.csproj", "{4FAC69DB-226C-4C3E-95D1-894BC730F104}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9B263BA6-0E6D-4970-8796-B6AD2BC78095}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B263BA6-0E6D-4970-8796-B6AD2BC78095}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B263BA6-0E6D-4970-8796-B6AD2BC78095}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B263BA6-0E6D-4970-8796-B6AD2BC78095}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FAC69DB-226C-4C3E-95D1-894BC730F104}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FAC69DB-226C-4C3E-95D1-894BC730F104}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FAC69DB-226C-4C3E-95D1-894BC730F104}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FAC69DB-226C-4C3E-95D1-894BC730F104}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4E35A75B-4243-48FC-8997-025FA7E68B74}
+	EndGlobalSection
+EndGlobal

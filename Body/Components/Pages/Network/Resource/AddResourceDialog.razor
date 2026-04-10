@@ -1,0 +1,306 @@
+﻿@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using System.Text.Json
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Request.Add
+@using GlassBoard.Response.Get
+@using MudBlazor
+@using SharedLibrary
+@using static SharedLibrary.Enum.Enums
+@inject IAuthService AuthService
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IConfiguration Config
+@inject NavigationManager Navigation
+@inject IResourceService ResourceService
+@inject IProbeProvider ProbeProvider
+@inject INamespaceProvider NamespaceProvider
+@inject ICheckPolicyProvider CheckPolicyProvider
+@inject IObservableProvider ObservableProvider
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h5">Configurazione Nuova Risorsa</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudContainer Style="max-height: 85vh; overflow-y: auto;" MaxWidth="MaxWidth.ExtraLarge">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudPaper Class="pa-4 mb-2" Outlined="true">
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_model.Name" Label="Nome Asset*" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="3">
+                                <MudSelect T="string" Label="Observable Namespace" @bind-Value="_selectedNamespace" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var ns in NamespaceProvider.namespaces)
+                                    {
+                                        <MudSelectItem Value="@ns.Name">@ns.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="3">
+                                <MudSelect T="ResourceTypes" Label="Tipo Risorsa" Value="_selectedResType" ValueChanged="OnResourceTypeChanged" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (ResourceTypes item in Enum.GetValues(typeof(ResourceTypes)))
+                                    {
+                                        <MudSelectItem T="ResourceTypes" Value="@item">@item.ToString()</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="3">
+                                <MudSelect T="string" Label="Sorgente (Probe)*" @bind-Value="_model.ProbeId" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
+                                    @foreach (var probe in _availableProbes)
+                                    {
+                                        <MudSelectItem Value="@probe.Id">@probe.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="string" Label="Collection Profiles" MultiSelection="true" @bind-SelectedValues="_selectedProfiles" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var profile in _filteredProfiles)
+                                    {
+                                        <MudSelectItem Value="@profile.Id">@profile.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="string" Label="Check Policies" MultiSelection="true" @bind-SelectedValues="_selectedCheckProfiles" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var policy in CheckPolicyProvider.Policies)
+                                    {
+                                        <MudSelectItem Value="@policy.Id">@policy.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4" Elevation="4">
+                        <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-4">1. Aggiungi Accesso IP</MudText>
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_tmpAddress" Label="IP Address" Variant="Variant.Outlined" />
+                            <MudSelect T="AccessScopeTypes" Label="Scopes" MultiSelection="true" @bind-SelectedValues="_tmpScopes" Variant="Variant.Outlined">
+                                @foreach (AccessScopeTypes item in Enum.GetValues(typeof(AccessScopeTypes)))
+                                {
+                                    <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudSelect T="InstrumentTypes" Label="Strumenti Attivi" MultiSelection="true" @bind-SelectedValues="_tmpInstruments" Variant="Variant.Outlined">
+                                @foreach (InstrumentTypes item in Enum.GetValues(typeof(InstrumentTypes)))
+                                {
+                                    <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAccess" FullWidth="true">Inserisci IP</MudButton>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="8">
+                    <MudTable Items="_model.ResourceAccesses" Dense="true" Bordered="true" Height="200px" FixedHeader="true">
+                        <HeaderContent>
+                            <MudTh>IP Address</MudTh>
+                            <MudTh>Scopes</MudTh>
+                            <MudTh>Instruments</MudTh>
+                            <MudTh></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.Address</MudTd>
+                            <MudTd>@string.Join(", ", context.AccessScopes)</MudTd> @* Già stringhe *@
+                            <MudTd>@string.Join(", ", context.Instruments)</MudTd>  @* Già stringhe *@
+                            <MudTd>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Color="Color.Error"
+                                               OnClick="@(() => RemoveAccess(context))"
+                                               Size="Size.Small" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_isProcessing" StartIcon="@Icons.Material.Filled.Save">Salva Risorsa</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    private AddResourceHttpRequest _model = new();
+    private ResourceTypes _selectedResType = ResourceTypes.Switch;
+    private bool _isProcessing = false;
+    private string _selectedNamespace;
+
+    // Liste filtrate per la UI
+    private List<CollectionProfileDetailed> _filteredProfiles = new();
+    private List<ProbeItemResponse> _availableProbes = new();
+
+    // Selezioni multiple
+    private IEnumerable<string> _selectedProfiles = new HashSet<string>();
+    private IEnumerable<string> _selectedCheckProfiles = new HashSet<string>();
+
+    // Temporanei per IP Access
+    private string _tmpAddress = "";
+    private IEnumerable<AccessScopeTypes> _tmpScopes = new HashSet<AccessScopeTypes>() { AccessScopeTypes.MonitoringService };
+    private IEnumerable<InstrumentTypes> _tmpInstruments = new HashSet<InstrumentTypes>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isProcessing = true;
+        try
+        {
+            // Caricamento parallelo di tutti i provider
+            await Task.WhenAll(
+                NamespaceProvider.InitializeAsync(),
+                CheckPolicyProvider.InitializeAsync(),
+                ObservableProvider.InitializeAsync(),
+                ProbeProvider.InitializeAsync()
+            );
+
+            LoadProbes();
+
+            // Default Namespace
+            if (string.IsNullOrEmpty(_selectedNamespace) && NamespaceProvider.namespaces.Any())
+                _selectedNamespace = NamespaceProvider.namespaces.First().Name;
+
+            FilterProfiles();
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void LoadProbes()
+    {
+        try
+        {
+            _availableProbes = ProbeProvider.GetAllProbes();
+            if (_availableProbes.Any()) _model.ProbeId = _availableProbes.First().Id;
+        }
+        catch (Exception ex) { Console.WriteLine(ex.Message); }
+    }
+
+    private void OnResourceTypeChanged(ResourceTypes newType)
+    { 
+        _selectedResType = newType;
+        _selectedProfiles = new HashSet<string>(); // Reset selezioni profiles
+        FilterProfiles();
+    }
+
+    private void FilterProfiles()
+    {
+        // Convertiamo l'enum selezionato in stringa una sola volta per efficienza
+        string selectedTypeString = _selectedResType.ToString();
+
+        _filteredProfiles = ObservableProvider.GetAllAvailableProfiles()
+            .Where(p =>
+                // Assicuriamoci che p.ResourceTypes sia convertibile in stringa
+                // e verifichiamo la corrispondenza
+                p.ResourceTypes.ToString() == "Unknown" ||
+                p.ResourceTypes.ToString().Contains(selectedTypeString))
+            .ToList();
+    }
+
+    private void AddAccess()
+    {
+        if (string.IsNullOrWhiteSpace(_tmpAddress)) return;
+        _model.ResourceAccesses.Add(new ResourceAccessItem
+        {
+            Address = _tmpAddress,
+            // CAMBIO QUI: passiamo la stringa dell'enum
+            AccessScopes = _tmpScopes.Select(s => s.ToString()).ToList(),
+            Instruments = _tmpInstruments.Select(i => i.ToString()).ToList()
+        });
+        SyncInstrumentConfigs();
+        _tmpAddress = "";
+    }
+
+    private void SyncInstrumentConfigs()
+    {
+        // Ora lavoriamo con stringhe
+        var distinctInstrumentNames = _model.ResourceAccesses
+            .SelectMany(a => a.Instruments)
+            .Distinct()
+            .ToList();
+
+        // Rimuoviamo le config non più presenti (confronto tra stringhe)
+        _model.InstrumentConfigurations.RemoveAll(c => !distinctInstrumentNames.Contains(c.Instrument));
+
+        foreach (var instrumentName in distinctInstrumentNames)
+        {
+            if (!_model.InstrumentConfigurations.Any(c => c.Instrument == instrumentName))
+            {
+                // Proviamo a recuperare l'ID numerico dall'enum solo se serve per campi tecnici
+                if (Enum.TryParse<InstrumentTypes>(instrumentName, out var type))
+                {
+                    _model.InstrumentConfigurations.Add(new InstrumentConfigItem
+                    {
+                        InstrumentId = (int)type, // Se il backend vuole ancora l'ID qui
+                        Instrument = instrumentName,
+                        Port = type == InstrumentTypes.Snmp ? 161 : 0
+                    });
+                }
+            }
+        }
+    }
+
+    private void RemoveAccess(ResourceAccessItem item) { _model.ResourceAccesses.Remove(item); SyncInstrumentConfigs(); }
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrEmpty(_model.ProbeId) || !_model.ResourceAccesses.Any()) return;
+        _isProcessing = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+
+            // Mapping selezioni UI -> Modello Request
+            _model.ResourceTypes = new List<string> { _selectedResType.ToString() };
+            _model.CollectionProfileIds = _selectedProfiles.ToList();
+            _model.CheckProfileIds = _selectedCheckProfiles.ToList();
+
+            // Attributo Namespace dinamico
+            _model.ResourceAttributes ??= new List<ResourceAttributeItem>();
+            _model.ResourceAttributes.RemoveAll(a => a.Key == "observable-namespace");
+            if (!string.IsNullOrEmpty(_selectedNamespace))
+            {
+                _model.ResourceAttributes.Add(new ResourceAttributeItem { Key = "observable-namespace", Value = _selectedNamespace });
+            }
+
+            _model.Description = string.IsNullOrWhiteSpace(_model.Description) ? _model.Name : _model.Description;
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, Config["ResourceApi:EndpointAddResource"]);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(_model);
+
+            var res = await Http.SendAsync(request);
+            if (res.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Risorsa creata con successo", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+                Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+            }
+            else
+            {
+                var err = await res.Content.ReadAsStringAsync();
+                Snackbar.Add($"Errore: {err}", Severity.Error);
+            }
+        }
+        finally { _isProcessing = false; }
+    }
+}

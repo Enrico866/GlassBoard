@@ -1,0 +1,58 @@
+﻿@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-2">Namespace: <MudChip T="string" Color="Color.Primary" Size="Size.Small">@NamespaceName</MudChip></MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">Lista delle configurazioni osservabili disponibili per questo namespace.</MudText>
+
+        <MudTable Items="Configs" T="ObservableConfig" Dense="true" Hover="true" FixedHeader="true" Height="400px" Elevation="0">
+            <HeaderContent>
+                <MudTh>Nome / ID</MudTh>
+                <MudTh>Descrizione</MudTh>
+                <MudTh Style="width: 50px;"></MudTh>
+            </HeaderContent>
+            <RowTemplate Context="config">
+                <MudTd DataLabel="Nome">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.body2"><b>@config.Name</b></MudText>
+                        <MudText Typo="Typo.caption">@config.Id</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Descrizione">
+                    <MudText Typo="Typo.body2">@config.Description</MudText>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" OnClick="@(() => CopyToClipboard(config.Id))" />
+                </MudTd>
+            </RowTemplate>
+            @* CORREZIONE: Qui usiamo NoRecordsContent invece di NoItemsContent *@
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="pa-4">Nessuna configurazione trovata.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Chiudi</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public string NamespaceName { get; set; }
+    
+    // Aggiornato: ora usiamo la lista tipizzata invece di BsonDocument
+    [Parameter] public List<ObservableConfig> Configs { get; set; } = new();
+
+    private void Close() => MudDialog.Close();
+
+    private void CopyToClipboard(string text)
+    {
+        // Nota: In un'app Blazor reale servirebbe un piccolo bridge JS per copiare negli appunti
+        // Per ora simuliamo con uno Snackbar
+        Snackbar.Add($"ID copiato: {text}", Severity.Info);
+    }
+}

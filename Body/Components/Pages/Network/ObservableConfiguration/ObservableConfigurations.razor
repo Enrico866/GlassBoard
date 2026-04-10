@@ -1,0 +1,212 @@
+﻿@page "/network/observable-configurations"
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Response.Get
+@using SharedLibrary.Enum
+@using static SharedLibrary.Enum.Enums
+@inject IObservableProvider ObservableProvider
+@inject NavigationManager NavigationManager
+
+<MudText Typo="Typo.h4" Class="mb-4">Configurazioni Osservabili</MudText>
+
+@if (!ObservableProvider.IsLoaded)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
+}
+else
+{
+    <MudTable Items="_filteredConfigs"
+              Hover="true"
+              Dense="true"
+              Elevation="2"
+              Breakpoint="Breakpoint.Sm"
+              ExpandedRow="_expandedRow">
+        <ToolBarContent>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">Nuova</MudButton>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchString" Placeholder="Cerca nome..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="InstrumentTypes?" Label="Filtra per Instrument" Clearable="true" ValueChanged="OnInstrumentChanged" Style="width: 200px;">
+                @foreach (var type in Enum.GetValues<InstrumentTypes>())
+                {
+                    <MudSelectItem Value="@((InstrumentTypes?)type)">@type.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh></MudTh>
+            <MudTh>Nome</MudTh>
+            <MudTh>Descrizione</MudTh>
+            <MudTh>Instrument</MudTh>
+            <MudTh>Azioni</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="rowItem">
+            <MudTd>
+                <MudIconButton Icon="@(_expandedRow == rowItem ? Icons.Material.Filled.KeyboardArrowUp : Icons.Material.Filled.KeyboardArrowDown)"
+                               OnClick="() => HandleExpand(rowItem)" />
+            </MudTd>
+            <MudTd>@rowItem.Name</MudTd>
+            <MudTd>@rowItem.Description</MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Info">@rowItem.Instrument</MudChip></MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Primary" Size="Size.Small"
+                           OnClick="() => NavigateToDetail(rowItem.Id)">Dettaglio</MudIconButton>
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small"
+                               OnClick="() => OpenDuplicateDialog(rowItem)" Title="Duplica" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small"
+                               OnClick="() => OpenEditDialog(rowItem)" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                           Disabled=true OnClick="() => ConfirmDelete(rowItem)" />
+            </MudTd>
+        </RowTemplate>
+
+        <ChildRowContent Context="rowItem">
+            <MudTr>
+                <MudTd colspan="5">
+                    <MudCard Elevation="0" Class="pa-2">
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle2">
+                                <strong>@(string.IsNullOrEmpty(rowItem.ScalarOidTemplate) ? "Table OID:" : "Scalar OID:")</strong>
+                                @(rowItem.ScalarOidTemplate ?? rowItem.TableOidTemplate ?? "N/D")
+                            </MudText>
+
+                            <MudTable Items="rowItem.Details" Hover="true" Dense="true" Elevation="0" Class="mt-3">
+                                <HeaderContent>
+                                    <MudTh>Nome</MudTh>
+                                    <MudTh>Tipo</MudTh>
+                                    <MudTh>Info Dettaglio</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="detail">
+                                    <MudTd>@detail.Name</MudTd>
+                                    <MudTd>@detail.ResultType</MudTd>
+                                    <MudTd>
+                                        @if (detail.ResultType == "Metric")
+                                        {
+                                            <MudText Typo="Typo.caption">Kind: @detail.MetricKind | Unit: @detail.MetricUnit
+                                            @if (!string.IsNullOrEmpty(detail.Conversion))
+                                            {
+                                                <span> | Conversion: @detail.Conversion</span>
+                                            }
+                                            </MudText>
+                                        }
+                                        else if (detail.ResultType == "StructuredData")
+                                        {
+                                            <MudText Typo="Typo.caption">Column: @detail.ColumnOrdinal</MudText>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </MudCardContent>
+                    </MudCard>
+                </MudTd>
+            </MudTr>
+        </ChildRowContent>
+    </MudTable>
+}
+
+@code {
+    [Inject] IDialogService DialogService { get; set; }
+    private string _searchString = "";
+    private InstrumentTypes? _selectedInstrument;
+    private List<ObservableConfigurationDetailed> _allConfigs = new();
+    private ObservableConfigurationDetailed _expandedRow;
+
+    private IEnumerable<ObservableConfigurationDetailed> _filteredConfigs => _allConfigs
+        .Where(x =>
+            // Aggiungiamo (x.Name != null && ...) per evitare l'errore di null
+            (string.IsNullOrEmpty(_searchString) ||
+            (x.Name != null && x.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase)))
+            &&
+            (!_selectedInstrument.HasValue ||
+            (x.Instrument != null && string.Equals(x.Instrument, _selectedInstrument.Value.ToString(), StringComparison.OrdinalIgnoreCase)))
+        );
+
+    private async Task OpenDuplicateDialog(ObservableConfigurationDetailed config)
+    {
+        var parameters = new DialogParameters { ["ConfigToEdit"] = config, ["IsDuplicate"] = true };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<CreateObservableDialog>("Duplica Configurazione", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await ObservableProvider.InitializeAsync(forceRefresh: true);
+            _allConfigs = ObservableProvider.GetConfigs(null).Values.ToList();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateObservableDialog>("Crea Nuova Configurazione", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await ObservableProvider.InitializeAsync(forceRefresh: true);
+
+            // 2. Ricarica la lista aggiornata
+            _allConfigs = ObservableProvider.GetConfigs(null).Values.ToList();
+
+            // 3. Notifica l'interfaccia
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenEditDialog(ObservableConfigurationDetailed config)
+    {
+        var parameters = new DialogParameters { ["ConfigToEdit"] = config };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<CreateObservableDialog>("Modifica Configurazione", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            // Ricarichiamo i dati dal server per riflettere le modifiche
+            await ObservableProvider.InitializeAsync(forceRefresh: true);
+            _allConfigs = ObservableProvider.GetConfigs(null).Values.ToList();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ObservableProvider.InitializeAsync();
+        _allConfigs = ObservableProvider.GetConfigs(null).Values.ToList();
+    }
+
+    private void HandleExpand(ObservableConfigurationDetailed item)
+    {
+        _expandedRow = (_expandedRow == item) ? null : item;
+    }
+
+    private void NavigateToDetail(string id)
+    {
+        NavigationManager.NavigateTo($"/network/observable-configurations/detail/{id}");
+    }
+
+    private async Task ConfirmDelete(ObservableConfigurationDetailed item)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Attenzione",
+            $"Sei sicuro di voler eliminare la configurazione '{item.Name}'?",
+            yesText: "Elimina", cancelText: "Annulla");
+
+        if (result == true)
+        {
+            var success = await ObservableProvider.DeleteConfigurationAsync(item.Id);
+            if (success)
+            {
+                // Ricarica la lista dopo la cancellazione
+                _allConfigs = ObservableProvider.GetConfigs(null).Values.ToList();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void OnInstrumentChanged(InstrumentTypes? value) => _selectedInstrument = value;
+}

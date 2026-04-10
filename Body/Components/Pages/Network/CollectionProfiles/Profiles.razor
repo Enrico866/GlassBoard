@@ -1,0 +1,204 @@
+﻿@page "/network/collection-profiles"
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Response.Get
+@inject IObservableProvider ObservableProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5">Profili di Raccolta</MudText>
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Gestione delle configurazioni raggruppate per risorsa</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   Color="Color.Primary"
+                   OnClick="OpenCreateProfileDialog">
+            Nuovo Profilo
+        </MudButton>
+    </div>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-6" />
+    }
+
+    <MudDataGrid Items="@_profiles" T="CollectionProfileDetailed" Hover="true" Bordered="false" Striped="true" Class="mt-4 shadow-sm">
+        <Columns>
+            <PropertyColumn Property="x => x.Name" Title="Nome Profilo" Filterable="true" />
+
+            <TemplateColumn Title="Default" Size="Size.Small" HeaderStyle="width: 80px;">
+                <CellTemplate>
+                    <div class="d-flex justify-center">
+                        @if (context.Item.IsDefault)
+                        {
+                            <MudTooltip Text="Profilo Predefinito">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Default" Size="Size.Small" Opacity="0.3" />
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+
+            <PropertyColumn Property="x => x.ResourceTypes" Title="Tipo Risorsa" />
+
+            <TemplateColumn Title="Configurazioni Associate (OC)">
+                <CellTemplate>
+                    <div class="d-flex flex-wrap gap-1">
+                        @if (context.Item.ObservableConfigurationIds != null && context.Item.ObservableConfigurationIds.Any())
+                        {
+                            @foreach (var id in context.Item.ObservableConfigurationIds)
+                            {
+                                var ocInfo = GetOcDetails(id);
+                                @if (ocInfo != null)
+                                {
+                                    <MudTooltip Text="@($"ID: {id} | Instrument: {ocInfo.Instrument}")">
+                                        <MudChip T="string"
+                                                 Variant="Variant.Text"
+                                                 Color="Color.Primary"
+                                                 Size="Size.Small"
+                                                 Icon="@Icons.Material.Filled.SettingsInputComponent"
+                                                 Class="ma-0">
+                                            @ocInfo.Name
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error">
+                                        ID: @id.Substring(0, Math.Min(8, id.Length))...
+                                    </MudChip>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Nessuna OC associata</MudText>
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Azioni" HeaderStyle="width: 120px;" Sortable="false">
+                <CellTemplate>
+                    <div class="d-flex justify-end">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="@(() => OpenEditProfileDialog(context.Item))" />
+                        <MudIconButton OnClick="@(() => DeleteProfile(context.Item))" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" />
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" RowsPerPageString="Righe per pagina:" />
+        </PagerContent>
+    </MudDataGrid>
+</MudContainer>
+
+@code {
+    private List<CollectionProfileDetailed> _profiles = new();
+    private bool _loading = false;
+
+    // Metodo CORRETTO per gestire l'inizializzazione asincrona
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            // Fondamentale: inizializza il provider per popolare la cache delle OC (nomi, strumenti, ecc.)
+            await ObservableProvider.InitializeAsync();
+            await LoadProfiles();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DeleteProfile(CollectionProfileDetailed profile)
+    {
+        var result =  await ObservableProvider.DeleteProfileAsync(profile.Id);
+        if (result == "SUCCESS")
+        {
+            Snackbar.Add("Configurazione eliminata con successo!", Severity.Success);
+            await LoadProfiles();
+        }
+        else
+        {
+            // Gestione errore (es. mostrare un messaggio)
+            await DialogService.ShowMessageBox("Errore", "Impossibile eliminare il profilo. Riprova più tardi.");
+        }
+    }
+
+    private async Task OpenEditProfileDialog(CollectionProfileDetailed profile)
+    {
+        var parameters = new DialogParameters<CreateProfileDialog>
+    {
+        { x => x.ExistingProfile, profile }
+    };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            BackdropClick = false
+        };
+
+        // Usiamo lo stesso componente "CreateProfileDialog", il titolo cambia dinamicamente
+        var dialog = await DialogService.ShowAsync<CreateProfileDialog>("Modifica Profilo di Raccolta", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            // Ricarichiamo la lista per vedere le modifiche
+            await LoadProfiles();
+        }
+    }
+
+    private async Task LoadProfiles()
+    {
+        _profiles = await ObservableProvider.GetProfilesAsync();
+    }
+
+    /// <summary>
+    /// Esegue il lookup del nome dell'Observable Configuration usando il dizionario in cache
+    /// </summary>
+    private ObservableConfigurationDetailed? GetOcDetails(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+
+        // Accediamo alla configCache (Dictionary) definita nell'ObservableProvider
+        if (ObservableProvider.configCache != null && ObservableProvider.configCache.TryGetValue(id, out var detail))
+        {
+            return detail;
+        }
+        return null;
+    }
+
+    private async Task OpenCreateProfileDialog()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            BackdropClick = false
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateProfileDialog>("Crea Nuovo Profilo di Raccolta", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadProfiles();
+        }
+    }
+}

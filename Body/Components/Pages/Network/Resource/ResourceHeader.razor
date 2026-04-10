@@ -1,0 +1,220 @@
+﻿@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Components.Pages.Network.Resource.Check
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@using SharedLibrary.Models
+@using static SharedLibrary.Enum.Enums
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject ICheckPolicyProvider PolicyProvider
+
+@* 1. Sezione Azioni *@
+    <ResourceActionButtons ResourceName="@Data.Name"
+    ParentId="@ParentId"
+    IsObserved="@Data.IsMonitored"
+    IsProcessing="@_isProcessing"
+    ResourceId="@Data.Id"
+    LastMonitorDate="@Data.LastMetricsTimestamp"
+    IsProcessingDiscovery="@_isProcessingDiscovery"
+    OnDiscoveryClick="RunDiscovery"
+    OnToggleMonitoring="ToggleMonitoring" />
+
+@* 2. Sezione Info con Policy Manager *@
+<ResourceInfoCard TenantName="@TenantName"
+                  ProbeName="@ProbeName"
+                  Path="@(string.IsNullOrEmpty(Data.Path) ? "/" : Data.Path)">
+
+    <div class="info-item">
+        <MudText Typo="Typo.caption" Color="Color.Primary" Class="fw-bold">CHECK POLICY</MudText>
+        <div class="d-flex align-center mt-1">
+            @if (Data.CheckProfileIds != null && Data.CheckProfileIds.Any())
+            {
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Info" 
+                           Size="Size.Small" 
+                           StartIcon="@Icons.Material.Filled.Shield" 
+                           OnClick="OpenCheckPolicies" 
+                           Class="pa-0">
+                    @Data.CheckProfileIds.Count Policy Attive
+                </MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.AddCircle" 
+                               Size="Size.Small" 
+                               Color="Color.Primary" 
+                               OnClick="OpenAddPolicyDialog" 
+                               Class="ms-2" />
+            }
+            else
+            {
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Primary" 
+                           Size="Size.Small" 
+                           OnClick="OpenAddPolicyDialog">
+                    Aggiungi Policy
+                </MudButton>
+            }
+        </div>
+    </div>
+</ResourceInfoCard>
+
+<style>
+    .info-item {
+        border-left: 3px solid var(--mud-palette-primary);
+        padding-left: 12px;
+        min-width: 140px;
+    }
+</style>
+
+@code {
+    [Parameter] public ResourceItem Data { get; set; }
+    [Parameter] public string TenantName { get; set; }
+    [Parameter] public string OrgName { get; set; }
+    [Parameter] public string ProbeName { get; set; }
+    [Parameter] public string ParentId { get; set; }
+    [Parameter] public List<string> AvailableMetrics { get; set; }
+    [Parameter] public EventCallback OnResourceUpdated { get; set; }
+
+    private bool _isProcessing = false;
+    private bool _isProcessingDiscovery = false;
+
+    protected override async Task OnInitializedAsync() => await PolicyProvider.InitializeAsync();
+
+    private async Task RunDiscovery()
+    {
+        if (Data.ResourceAccesses == null || !Data.ResourceAccesses.Any())
+        {
+            Snackbar.Add("Parametri di accesso non trovati.", Severity.Warning);
+            return;
+        }
+
+        // Prendiamo il primo accesso disponibile dal DTO tipizzato
+        var access = Data.ResourceAccesses[0];
+        
+        // Conversione sicura da stringa a Enum InstrumentTypes
+        var availableInstruments = access.Instruments?
+            .Select(i => Enum.TryParse<InstrumentTypes>(i, true, out var result) ? result : InstrumentTypes.Snmp)
+            .Where(i => i == InstrumentTypes.Snmp)
+            .ToList() ?? new();
+
+        var parameters = new DialogParameters<DiscoverySelectionDialog>
+        {
+            { x => x.AvailableInstruments, availableInstruments },
+            { x => x.Address, access.Address ?? "N/D" }
+        };
+
+        var dialog = await DialogService.ShowAsync<DiscoverySelectionDialog>("Avvia Discovery", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is List<InstrumentTypes> selected)
+        {
+            await ExecuteDiscoveryRequests(selected);
+        }
+    }
+
+    private async Task ExecuteDiscoveryRequests(List<InstrumentTypes> selected)
+    {
+        _isProcessingDiscovery = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:DiscoveryUrl"];
+            
+            // Estraiamo l'OrgId dai tag se non presente come proprietà diretta
+            var orgIdStr = Data.Tags.FirstOrDefault(t => t.StartsWith("organization:"))?.Split(':').Last();
+
+            var tasks = selected.Select(async inst =>
+            {
+                var requestBody = new
+                {
+                    ResourceId = Data.Id,
+                    IsPreDiscovery = (inst == InstrumentTypes.Snmp),
+                    InstrumentType = inst.ToString(),
+                    OrganizationId = orgIdStr
+                };
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+                request.Content = JsonContent.Create(requestBody);
+
+                return await Http.SendAsync(request);
+            });
+
+            var responses = await Task.WhenAll(tasks);
+            int success = responses.Count(r => r.IsSuccessStatusCode);
+
+            if (success > 0) Snackbar.Add($"{success} Discovery inviate", Severity.Success);
+            if (success < selected.Count) Snackbar.Add($"{selected.Count - success} fallite", Severity.Error);
+        }
+        catch (Exception ex) { Snackbar.Add($"Errore: {ex.Message}", Severity.Error); }
+        finally
+        {
+            _isProcessingDiscovery = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleMonitoring()
+    {
+        _isProcessing = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var baseUrl = Config["ResourceApi:EndpointAddResource"]?.TrimEnd('/');
+            var url = $"{baseUrl}/{Data.Id}";
+
+            // Payload coerente con l'endpoint API: invertiamo IsMonitored
+            var requestBody = new { isObserved = !Data.IsMonitored };
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(requestBody);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                await OnResourceUpdated.InvokeAsync();
+                Snackbar.Add("Stato monitoraggio aggiornato", Severity.Success);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _isProcessing = false; }
+    }
+
+    private async Task OpenCheckPolicies()
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["PolicyIds"] = Data.CheckProfileIds, 
+            ["ResourceId"] = Data.Id 
+        };
+        
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<ResourceCheckPoliciesDialog>("Dettaglio Policy", parameters, options);
+    }
+
+    private async Task OpenAddPolicyDialog()
+    {
+        var parameters = new DialogParameters<AddCheckPolicyDialog>
+        {
+            { x => x.ResourceId, Data.Id },
+            { x => x.AvailableMetrics, Data.AvailableMetricNames },
+            { x => x.CurrentPolicyIds, Data.CheckProfileIds ?? new() }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var result = await DialogService.ShowAsync<AddCheckPolicyDialog>("Associa Policy", parameters, options);
+        
+        if (!(await result.Result).Canceled) 
+            await OnResourceUpdated.InvokeAsync();
+    }
+}

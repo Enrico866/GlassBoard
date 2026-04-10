@@ -1,0 +1,162 @@
+﻿@page "/network/refresh-jobs"
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Response.Get
+@using static GlassBoard.Response.Get.GetTenantHttpResponse
+@inject ICollectorProvider CollectorProvider
+@inject ITenantProvider TenantProvider
+@inject IJobService JobService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Refresh Jobs</MudText>
+
+<MudPaper Elevation="2" Class="pa-4" Style="background-color: #f8f9fa;">
+    <MudStack Spacing="4">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+
+            <MudSelect T="string" Label="Tenant" Value="@SelectedTenantId" Variant="Variant.Outlined"
+                       ValueChanged="OnTenantChanged" Margin="Margin.Dense" Dense="true" Style="width: 250px; background-color: white;">
+                @foreach (var tenant in TenantProvider.Tenants)
+                {
+                    <MudSelectItem Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="string" Label="Organization" @bind-Value="SelectedOrganizationId" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Disabled="@(!AvailableOrganizations.Any())" Dense="true" Style="width: 250px; background-color: white;">
+                @foreach (var org in AvailableOrganizations)
+                {
+                    <MudSelectItem Value="@org.Id">@org.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string" Label="Database" Value="@DatabaseName" ReadOnly="true" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="width: 200px; background-color: #e9ecef;" />
+
+            <MudSelect T="string" Label="Probe" @bind-Value="SelectedProbeId" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Dense="true" Style="width: 250px; background-color: white;">
+                @foreach (var probe in CollectorProvider.GetCollectors())
+                {
+                    <MudSelectItem Value="@probe.Id">@probe.Description</MudSelectItem>
+                }
+            </MudSelect>
+
+        </MudStack>
+
+        <MudDivider Class="my-2" />
+
+        <MudStack Row="true" Justify="Justify.FlexEnd">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="HandleRefreshJobs" Disabled="@IsProcessing" Loading="@IsProcessing">
+                @(IsProcessing ? "Generazione in corso..." : "Lancia Generate and Persist")
+            </MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (_jobs == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+}
+else if (!_jobs.Any())
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">Nessun job trovato.</MudAlert>
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true" Class="mt-4">
+        @foreach (var job in _jobs)
+        {
+            <MudExpansionPanel>
+                <TitleContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="@GetIcon(job.TaskName)" Class="mr-3" />
+                        <div>
+                            <MudText Typo="Typo.subtitle1"><b>@job.CollectorPayload.Resource.Name</b></MudText>
+                            <MudText Typo="Typo.caption">ID: @job.Id | Task: @job.TaskName</MudText>
+                        </div>
+                        <MudSpacer />
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small">@job.SchedulingPolicy.IntervalInSeconds sec</MudChip>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Dettagli Connessione</MudText>
+                            <MudSimpleTable Dense="true" Hover="false" Elevation="0">
+                                <tbody>
+                                    <tr><td>IP Address</td><td>@job.CollectorPayload.Resource.ResourceAccess.Address</td></tr>
+                                    <tr><td>Instrument</td><td>@job.CollectorPayload.Resource.ResourceAccess.InstrumentConfiguration.Instrument</td></tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Attributes</MudText>
+                            @foreach (var attr in job.CollectorPayload.Resource.Attributes.Take(5))
+                            {
+                                <MudText Typo="Typo.caption"><b>@attr.Key:</b> @attr.Value</MudText>
+                    
+                                <br />
+                            }
+                        </MudItem>
+                    </MudGrid>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    private string? SelectedProbeId, SelectedTenantId, DatabaseName, SelectedOrganizationId;
+    private bool IsProcessing;
+    private List<JobItem>? _jobs = new();
+    private List<OrganizationItemResponse> AvailableOrganizations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(CollectorProvider.InitializeAsync(), TenantProvider.InitializeAsync());
+    }
+
+    private void OnTenantChanged(string newValue)
+    {
+        SelectedTenantId = newValue;
+        SelectedOrganizationId = null;
+        var selectedTenant = TenantProvider.Tenants.FirstOrDefault(t => t.Id == SelectedTenantId);
+        DatabaseName = selectedTenant?.DatabaseName;
+        AvailableOrganizations = selectedTenant?.Organizations ?? new();
+    }
+
+    private async Task HandleRefreshJobs()
+    {
+        if (string.IsNullOrEmpty(SelectedTenantId) || string.IsNullOrEmpty(SelectedProbeId) || string.IsNullOrEmpty(SelectedOrganizationId))
+        {
+            Snackbar.Add("Seleziona tutti i campi obbligatori.", Severity.Warning);
+            return;
+        }
+
+        IsProcessing = true;
+        _jobs = null;
+
+        var result = await JobService.GenerateAndNotifyAsync(SelectedProbeId, SelectedTenantId, SelectedOrganizationId, DatabaseName!);
+
+        if (result.Success)
+        {
+            _jobs = result.Jobs;
+            Snackbar.Add("Job generati e notificati con successo!", Severity.Success);
+        }
+        else
+        {
+            _jobs = new();
+            Snackbar.Add("Errore durante l'operazione.", Severity.Error);
+        }
+
+        IsProcessing = false;
+    }
+
+    private string GetIcon(string taskName) => taskName switch
+    {
+        "reachability" => Icons.Material.Filled.SettingsEthernet,
+        "snmp" => Icons.Material.Filled.Analytics,
+        _ => Icons.Material.Filled.WorkOutline
+    };
+}

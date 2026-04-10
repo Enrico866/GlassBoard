@@ -1,0 +1,276 @@
+﻿@using System.Net.Http.Headers
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Request
+@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@using MudBlazor
+@inject ISnackbar Snackbar
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+
+<MudDialog>
+    <DialogContent>
+        <div class="d-flex align-center justify-space-between mb-4">
+            <MudText Typo="Typo.h6">Policy di Check Attive</MudText>
+            <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">@_activeProfiles?.Count Policy</MudChip>
+        </div>
+
+        @if (_activeProfiles == null)
+        {
+            <MudProgressLinear Color="Color.Secondary" Indeterminate="true" />
+        }
+        else if (!_activeProfiles.Any())
+        {
+            <MudAlert Severity="Severity.Warning">Nessuna policy associata a questa risorsa.</MudAlert>
+        }
+        else
+        {
+            @foreach (var profile in _activeProfiles)
+            {
+                <MudExpansionPanels MultiExpansion="true" Class="mb-4">
+                    <MudExpansionPanel Expanded="true">
+                        <TitleContent>
+                            <div class="d-flex align-center gap-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Secondary" />
+                                <MudText><b>@profile.Name</b> <span class="mud-text-secondary ml-2">(@profile.CheckIds.Count Check)</span></MudText>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudTable Items="@profile.RuleDetails" Dense="true" Hover="true" Elevation="0" Context="check">
+                                <HeaderContent>
+                                    <MudTh>Nome Check</MudTh>
+                                    <MudTh>Espressione / Soglia</MudTh>
+                                    <MudTh>Severità</MudTh>
+                                    <MudTh>Ultimo Check</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Nome">
+                                        <div class="d-flex flex-column">
+                                            <MudText Typo="Typo.body2">@check.Name</MudText>
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@check.Category</MudText>
+                                        </div>
+                                    </MudTd>
+                                    <MudTd DataLabel="Regola">
+                                        <code>@check.RuleDefinitions?.FirstOrDefault()?.Condition?.Expression</code>
+                                    </MudTd>
+                                    <MudTd DataLabel="Severità">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetResultColor(check)" Variant="Variant.Text">
+                                            @check.RuleDefinitions?.FirstOrDefault()?.ResultsOnPass
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Ultimo Check">
+                                        @{
+                                            var lastResult = _checkResults?.FirstOrDefault(r => r.CheckId == check.Id);
+                                        }
+                                        @if (lastResult != null)
+                                        {
+                                            <div class="d-flex align-center gap-1">
+                                                <MudIcon Icon="@(lastResult.Result == "Success" ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+                                                         Color="@(lastResult.Result == "Success" ? Color.Success : Color.Error)" Size="Size.Small" />
+                                                <MudText Typo="Typo.caption">@lastResult.ModifiedOn.ToString("dd/MM/yyyy HH:mm")</MudText>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Mai eseguito</MudText>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        }
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Modifica Associazioni Risorsa</MudText>
+        <MudSelect T="string" Label="Policy della risorsa" MultiSelection="true" @bind-SelectedValues="_selectedIds" Variant="Variant.Outlined">
+            @foreach (var p in _available)
+            {
+                <MudSelectItem T="string" Value="@p.Id">@p.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Chiudi</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Salva Modifiche</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public List<string> PolicyIds { get; set; } = new();
+    [Parameter] public string ResourceId { get; set; }
+
+    private IEnumerable<string> _selectedIds = new HashSet<string>();
+    private List<CheckPolicyModels> _activeProfiles;
+    private List<(string Id, string Name)> _available = new();
+
+    private List<CheckResourceResultModel> _checkResults = new();
+
+    protected override async Task OnInitializedAsync() {
+        _selectedIds = new HashSet<string>(PolicyIds ?? new List<string>());
+        await LoadData();
+    }
+
+    private async Task LoadData() {
+        await LoadCheckPolicies();
+
+        await LoadLastCheckResults();
+
+        if (_activeProfiles?.Any() == true) {
+            var allChecks = await LoadAllChecks();
+            foreach (var profile in _activeProfiles) {
+                // Colleghiamo i dettagli dei check alla policy corrispondente
+                profile.RuleDetails = allChecks.Where(c => profile.CheckIds.Contains(c.Id)).ToList();
+            }
+        }
+    }
+
+    private async Task LoadLastCheckResults()
+    {
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            // L'endpoint configurato nell'appconfig
+            var url = Config["ResourceApi:ChecksResourcesResultUrl"];
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<GetCheckResourceResultHttpResponse>();
+                if (result?.Items != null)
+                {
+                    // Filtriamo solo i risultati che appartengono a questa risorsa specifica
+                    _checkResults = result.Items.Where(i => i.ResourceId == ResourceId).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Errore caricamento risultati check: " + ex.Message);
+        }
+    }
+
+    private async Task LoadCheckPolicies()
+    {
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:CheckPoliciesUrl"];
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<GetCheckPolicyHttpResponse>();
+                if (result?.Items != null)
+                {
+                    _available = result.Items.Select(p => (p.Id, p.Name)).OrderBy(x => x.Name).ToList();
+                    _activeProfiles = (PolicyIds != null && PolicyIds.Any())
+                        ? result.Items.Where(p => PolicyIds.Contains(p.Id)).ToList()
+                        : new List<CheckPolicyModels>();
+                }
+            }
+        }
+        catch (Exception ex) { Snackbar.Add("Errore Policy API: " + ex.Message, Severity.Error); }
+    }
+
+    private async Task<List<CheckModel>> LoadAllChecks()
+    {
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            // Recuperiamo l'URL e puliamolo da eventuali spazi
+            var baseUrl = Config["ResourceApi:ChecksUrl"]?.Trim();
+
+            if (string.IsNullOrEmpty(baseUrl))
+            {
+                Snackbar.Add("Errore: URL dei Check non configurato", Severity.Error);
+                return new List<CheckModel>();
+            }
+
+            // Forza lo slash finale come visto in Bruno
+            var url = baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/";
+            url += "?resourceId=" + ResourceId;
+
+            // --- DEBUG: Vediamo esattamente cosa stiamo chiamando ---
+            Console.WriteLine($"DEBUG: Chiamata API Check in corso su: {url}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            // Assicurati che il Channel sia lo stesso della chiamata Policy
+            var channel = Config["ResourceApi:Channel"];
+            if (!string.IsNullOrEmpty(channel))
+            {
+                request.Headers.Add("X-MYDEV-CHANNEL", channel);
+            }
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<GetCheckHttpResponse>();
+                return result?.Items ?? new List<CheckModel>();
+            }
+            else
+            {
+                // Logghiamo l'errore esatto ricevuto
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"API Check fallita: {response.StatusCode} - {url}", Severity.Error);
+                Console.WriteLine($"ERRORE API: {response.StatusCode} - Contenuto: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Eccezione durante il caricamento Check: " + ex.Message, Severity.Error);
+        }
+        return new List<CheckModel>();
+    }
+
+    private Color GetResultColor(CheckModel check)
+    {
+        var res = check.RuleDefinitions?.FirstOrDefault()?.ResultsOnPass;
+        return res switch { "Error" => Color.Error, "Warning" => Color.Warning, _ => Color.Success };
+    }
+
+    private async Task Submit()
+    {
+        // Logica PUT per aggiornare l'elenco Policy della risorsa (come visto prima)
+        var token = await AuthService.GetContextAccessTokenAsync();
+        var requestBody = new { Id = ResourceId, CheckProfileIds = _selectedIds.ToList() };
+        using var request = new HttpRequestMessage(HttpMethod.Put, Config["ResourceApi:EndpointAddResource"] + "/" + requestBody.Id);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+        request.Headers.Add("X-MYDEV-APPNAME", "glass");
+        request.Content = JsonContent.Create(requestBody);
+        var response = await Http.SendAsync(request);
+
+        if (response.IsSuccessStatusCode) 
+        {
+            MudDialog.Close(DialogResult.Ok(_selectedIds.ToList()));
+        }
+        else
+        {
+            var errorDetail = await response.Content.ReadAsStringAsync();
+            // Log per debug in caso di errore 400
+            Console.WriteLine($"[JSON INVIATO]: {System.Text.Json.JsonSerializer.Serialize(requestBody)}");
+            Console.WriteLine($"[ERRORE API]: {errorDetail}");
+            
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

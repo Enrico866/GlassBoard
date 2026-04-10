@@ -1,0 +1,90 @@
+﻿@page "/network/scheduling-policies"
+@using GlassBoard.Abstractions.Provider
+@using SharedLibrary.Models
+@inject ISchedulingProvider SchedulingProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5">Scheduling Policies</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => OpenDialog()" StartIcon="@Icons.Material.Filled.Add">
+            Nuova Politica
+        </MudButton>
+    </div>
+
+    <MudTable Items="@_policies" Loading="@_loading" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Tipo</MudTh>
+            <MudTh>Valore</MudTh>
+            <MudTh Style="text-align:right">Azioni</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="Tipo">
+                @* Aggiungi T="string" qui *@
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(string.IsNullOrEmpty(context.Cron) ? Color.Info : Color.Secondary)">
+                    @(string.IsNullOrEmpty(context.Cron) ? "Intervallo" : "Cron")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Valore">
+                @(string.IsNullOrEmpty(context.Cron) ? $"{context.IntervalInSeconds}s" : context.Cron)
+            </MudTd>
+            <MudTd Style="text-align:right">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenDialog(context))" Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => DeletePolicy(context.Id))" Color="Color.Error" Size="Size.Small" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<SchedulingPolicy> _policies = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        // Inizializza o refresh della cache nel provider
+        await SchedulingProvider.InitializeAsync(forceRefresh: true);
+        // Leggi i dati dalla proprietà sincrona
+        _policies = SchedulingProvider.Policies;
+        _loading = false;
+    }
+
+    private async Task OpenDialog(SchedulingPolicy? policy = null)
+    {
+        var isEdit = policy != null;
+        var parameters = new DialogParameters { ["Model"] = isEdit ? new SchedulingPolicy { 
+            Id = policy!.Id, Name = policy.Name, IntervalInSeconds = policy.IntervalInSeconds, Cron = policy.Cron 
+        } : new SchedulingPolicy() };
+
+        var dialog = await DialogService.ShowAsync<SchedulingPoliciesDialog>(isEdit ? "Modifica Politica" : "Nuova Politica", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            var model = (SchedulingPolicy)result.Data;
+            bool success = isEdit ? await SchedulingProvider.UpdatePolicyAsync(model) : await SchedulingProvider.CreatePolicyAsync(model);
+            
+            if (success) {
+                Snackbar.Add("Operazione riuscita", Severity.Success);
+                await LoadData();
+            }
+        }
+    }
+
+    private async Task DeletePolicy(string id)
+    {
+        if (await SchedulingProvider.DeletePolicyAsync(id))
+        {
+            Snackbar.Add("Eliminata", Severity.Info);
+            await LoadData();
+        }
+    }
+}

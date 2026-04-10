@@ -1,0 +1,159 @@
+﻿@using System.Net.Http.Headers
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Request.Update
+@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@using MongoDB.Bson
+@using MudBlazor
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IResourceService ResourceService
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject INamespaceProvider NamespaceCache
+
+<MudTable Items="Attributes" T="AttributeItem" Dense="true" Hover="true" Elevation="1" Height="350px" FixedHeader="true">
+    <ToolBarContent>
+        <MudText Typo="Typo.subtitle1"><b>Attributi Dinamici (SNMP)</b></MudText>
+        <MudSpacer />
+        <div class="d-flex gap-2 align-center">
+            <MudTextField @bind-Value="_newKey" Placeholder="Chiave" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 120px;" />
+            <MudTextField @bind-Value="_newVal" Placeholder="Valore" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 120px;" />
+            <MudIconButton Icon="@Icons.Material.Filled.Save" Color="Color.Primary" OnClick="AddAndSave" Size="Size.Small" Disabled="_isSaving" />
+        </div>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Chiave</MudTh>
+        <MudTh>Valore</MudTh>
+        <MudTh Style="width: 100px; text-align: right;">Azioni</MudTh>
+    </HeaderContent>
+    <RowTemplate Context="attr">
+        <MudTd>@attr.Key</MudTd>
+        <MudTd><code>@attr.Value</code></MudTd>
+        <MudTd>
+            <div class="d-flex justify-end gap-1">
+                @if (attr.Key == "observable-namespace")
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.TravelExplore" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenDiscovery(attr.Value))" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => ConfirmDelete(attr))" Disabled="_isSaving" />
+            </div>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter] public string ResourceId { get; set; }
+    [Parameter] public List<AttributeItem> Attributes { get; set; } = new();
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _newKey, _newVal;
+    private bool _isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Carica i dati all'avvio se la cache è vuota
+        await NamespaceCache.InitializeAsync();
+    }
+
+    private async Task AddAndSave()
+    {
+        if (string.IsNullOrWhiteSpace(_newKey))
+        {
+            Snackbar.Add("Chiave mancante", Severity.Warning);
+            return;
+        }
+
+        // Aggiunta locale
+        Attributes.Add(new AttributeItem { Key = _newKey, Value = _newVal });
+
+        if (await SaveToApi())
+        {
+            _newKey = "";
+            _newVal = "";
+        }
+    }
+
+    private async Task ConfirmDelete(AttributeItem item)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Conferma Eliminazione",
+            (MarkupString)$"Sei sicuro di voler eliminare l'attributo <b>{item.Key}</b>?",
+            yesText: "Elimina",
+            cancelText: "Annulla"
+        );
+
+        if (result == true)
+        {
+            Attributes.Remove(item);
+            await SaveToApi();
+        }
+    }
+
+    private async Task<bool> SaveToApi()
+    {
+        _isSaving = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:EndpointAddResource"] + "/" + ResourceId; // Endpoint PUT unico
+
+            var requestBody = new UpdateResourceAttributesRequest
+            {
+                Id = ResourceId,
+                ResourceAttributes = Attributes
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(requestBody);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Attributi aggiornati con successo", Severity.Success);
+                await OnChanged.InvokeAsync();
+                return true;
+            }
+            else
+            {
+                Snackbar.Add($"Errore salvataggio: {response.StatusCode}", Severity.Error);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore di rete: {ex.Message}", Severity.Error);
+            return false;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task OpenDiscovery(string ns)
+    {
+        // 1. Cerchiamo il namespace (può restituire null se non trovato)
+        var foundNamespace = NamespaceCache.namespaces.FirstOrDefault(x => x.Name == ns);
+
+        // 2. Estraiamo le config o creiamo una lista vuota
+        // Usiamo il percorso completo per evitare l'errore "namespace not found"
+        List<ObservableConfig> configs = foundNamespace?.ObservableConfigurations                                                 ?? new List<ObservableConfig>();
+
+        var parameters = new DialogParameters
+        {
+            ["NamespaceName"] = ns,
+            ["Configs"] = configs
+        };
+
+        await DialogService.ShowAsync<NamespaceDiscoveryDialog>("Discovery", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+    }
+}

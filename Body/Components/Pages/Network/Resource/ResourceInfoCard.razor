@@ -1,0 +1,26 @@
+﻿<MudPaper Elevation="0" Class="pa-4 mb-6 info-card-container">
+    <div class="d-flex flex-wrap gap-x-8 gap-y-4">
+        <div class="info-item">
+            <MudText Typo="Typo.caption" Color="Color.Primary" Class="fw-bold">CLIENTE / TENANT</MudText>
+            <MudText Typo="Typo.body2"><b>@TenantName</b></MudText>
+        </div>
+        <div class="info-item">
+            <MudText Typo="Typo.caption" Color="Color.Primary" Class="fw-bold">PROBE</MudText>
+            <MudText Typo="Typo.body2"><b>@ProbeName</b></MudText>
+        </div>
+
+        @ChildContent @* Qui inseriremo il Policy Manager *@
+
+        <div class="info-item path-item">
+            <MudText Typo="Typo.caption" Color="Color.Primary" Class="fw-bold">PATH</MudText>
+            <MudText Typo="Typo.body2" Class="path-text">@Path</MudText>
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public string TenantName { get; set; }
+    [Parameter] public string ProbeName { get; set; }
+    [Parameter] public string Path { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+}

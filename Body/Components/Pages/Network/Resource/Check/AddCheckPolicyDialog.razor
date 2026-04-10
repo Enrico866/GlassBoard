@@ -1,0 +1,296 @@
+﻿@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Request.Add
+@using GlassBoard.Response
+@using GlassBoard.Response.Add
+@using GlassBoard.Response.Get
+@using MudBlazor
+@inject ICheckProvider SingleCheckProvider
+@inject ICheckPolicyProvider PolicyProvider
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Gestione Check Policy</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTabs Elevation="0" Outlined="true" PanelClass="pa-4" Rounded="true" Color="Color.Primary">
+
+            @* --- TAB 1: SELEZIONE E ASSOCIAZIONE --- *@
+            <MudTabPanel Text="Usa Esistente" Icon="@Icons.Material.Filled.List">
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">Associa una policy esistente alla risorsa.</MudAlert>
+                <MudSelect T="string" Label="Seleziona Policy" Variant="Variant.Outlined" @bind-Value="_selectedExistingPolicyId" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var p in _existingPolicies)
+                    {
+                        <MudSelectItem T="string" Value="@p.Id">@p.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <div class="d-flex justify-end mt-4">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitExisting" Disabled="@(string.IsNullOrEmpty(_selectedExistingPolicyId) || _isProcessing)">
+                        Associa Selezionata
+                    </MudButton>
+                </div>
+            </MudTabPanel>
+
+            @* --- TAB 2: AGGIUNGI CHECK A POLICY ESISTENTE --- *@
+            <MudTabPanel Text="Aggiungi Check a Policy" Icon="@Icons.Material.Filled.PlaylistAdd">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudSelect T="CheckPolicyModels" Label="Policy da modificare" Variant="Variant.Outlined" ValueChanged="OnPolicyToUpdateChanged" AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var p in _existingPolicies)
+                            {
+                                <MudSelectItem T="CheckPolicyModels" Value="@p">@p.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <div class="d-flex align-end gap-2">
+                            <MudSelect T="string"
+                                       Label="Aggiungi nuovi Check"
+                                       MultiSelection="true"
+                                       @bind-SelectedValues="_selectedNewCheckIdsForExistingPolicy"
+                                       Variant="Variant.Outlined"
+                                       Style="flex-grow: 1;"
+                                       AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var check in _localCheckList)
+                                {
+                                    @* Opzionale: disabilitiamo i check che la policy ha già *@
+                                    bool alreadyPresent = _policyToUpdate?.CheckIds?.Contains(check.Id) ?? false;
+                                    <MudSelectItem T="string" Value="@check.Id" Disabled="@alreadyPresent">
+                                        @check.Name @(alreadyPresent ? "(Già presente)" : "")
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudTooltip Text="Crea nuovo Check tecnico">
+                                <MudIconButton Icon="@Icons.Material.Filled.AddCircle"
+                                               Color="Color.Secondary"
+                                               Variant="Variant.Filled"
+                                               OnClick="OpenCreateCheckDialog" />
+                            </MudTooltip>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+                <div class="d-flex justify-end mt-4">
+                    <MudButton Color="Color.Primary"
+                               Variant="Variant.Filled"
+                               OnClick="UpdatePolicyWithNewChecks"
+                               Disabled="@(_policyToUpdate == null || !_selectedNewCheckIdsForExistingPolicy.Any() || _isProcessing)">
+                        @if (_isProcessing)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Aggiorna e Associa
+                    </MudButton>
+                </div>
+            </MudTabPanel>
+
+            @* --- TAB 3: CREA NUOVA POLICY --- *@
+            <MudTabPanel Text="Crea Nuova" Icon="@Icons.Material.Filled.Add">
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_request.Name" Label="Nome Policy*" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_request.Namespace" Label="Namespace*" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <div class="d-flex align-end gap-2">
+                            <MudSelect T="string" Label="Seleziona Check" MultiSelection="true" @bind-SelectedValues="_selectedCheckIds" Variant="Variant.Outlined" Style="flex-grow: 1;" AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var check in _localCheckList)
+                                {
+                                    <MudSelectItem T="string" Value="@check.Id">@check.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudTooltip Text="Crea nuovo Check tecnico">
+                                <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Secondary" Variant="Variant.Filled" OnClick="OpenCreateCheckDialog" />
+                            </MudTooltip>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+                <div class="d-flex justify-end mt-4">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitNew" Disabled="@(_isProcessing || !_selectedCheckIds.Any() || string.IsNullOrEmpty(_request.Name))">
+                        @if (_isProcessing)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Crea e Associa
+                    </MudButton>
+                </div>
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Chiudi</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public string ResourceId { get; set; }
+    [Parameter] public List<string> CurrentPolicyIds { get; set; } = new();
+    [Parameter] public List<string> AvailableMetrics { get; set; } = new();
+
+    private AddCheckPolicyHttpRequest _request = new();
+    private IEnumerable<string> _selectedCheckIds = new HashSet<string>();
+    private string _selectedExistingPolicyId;
+
+    private CheckPolicyModels _policyToUpdate;
+    private IEnumerable<string> _selectedNewCheckIdsForExistingPolicy = new HashSet<string>();
+
+    private List<CheckModel> _localCheckList = new();
+    private List<CheckPolicyModels> _existingPolicies = new();
+    private bool _isProcessing = false;
+
+    protected override async Task OnInitializedAsync() => await RefreshData();
+
+    private async Task RefreshData()
+    {
+        await SingleCheckProvider.InitializeAsync(forceRefresh: true);
+        _localCheckList = SingleCheckProvider.Checks.ToList();
+        await PolicyProvider.InitializeAsync(forceRefresh: true);
+        _existingPolicies = PolicyProvider.Policies.ToList();
+        StateHasChanged();
+    }
+
+    private void OnPolicyToUpdateChanged(CheckPolicyModels p)
+    {
+        _policyToUpdate = p;
+        _selectedNewCheckIdsForExistingPolicy = new HashSet<string>(); // Reset selezione nuovi check al cambio policy
+    }
+
+    private async Task UpdatePolicyWithNewChecks()
+    {
+        if (_policyToUpdate == null) return;
+        _isProcessing = true;
+        try
+        {
+            // Unione set esistente + nuovi selezionati
+            var allCheckIds = _policyToUpdate.CheckIds.Union(_selectedNewCheckIdsForExistingPolicy).Distinct().ToList();
+
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:CheckPoliciesUrl"];
+
+            var updateReq = new AddCheckPolicyHttpRequest
+            {
+                Name = _policyToUpdate.Name,
+                Namespace = _policyToUpdate.Namespace,
+                CheckIds = allCheckIds
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(updateReq);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                // Dopo aver aggiornato la policy globale, assicuriamoci che sia associata a QUESTA risorsa
+                await AssociateToResource(_policyToUpdate.Id);
+            }
+            else
+            {
+                Snackbar.Add("Errore durante l'aggiornamento della policy", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _isProcessing = false; }
+    }
+
+    private async Task SubmitExisting()
+    {
+        _isProcessing = true;
+        try { await AssociateToResource(_selectedExistingPolicyId); }
+        finally { _isProcessing = false; }
+    }
+
+    private async Task SubmitNew()
+    {
+        _isProcessing = true;
+        try
+        {
+            _request.CheckIds = _selectedCheckIds.ToList();
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:CheckPoliciesUrl"];
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(_request);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var res = await response.Content.ReadFromJsonAsync<AddCheckPolicyResponse>();
+                await AssociateToResource(res.Id);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _isProcessing = false; }
+    }
+
+    private async Task AssociateToResource(string policyId)
+    {
+        var token = await AuthService.GetContextAccessTokenAsync();
+        var updateUrl = Config["ResourceApi:EndpointAddResource"] + "/" + ResourceId;
+
+        // Manteniamo le policy esistenti e aggiungiamo la nuova (HashSet evita duplicati)
+        var updatedList = new HashSet<string>(CurrentPolicyIds) { policyId };
+        var updateModel = new { Id = ResourceId, CheckProfileIds = updatedList.ToList() };
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, updateUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+        request.Content = JsonContent.Create(updateModel);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Policy salvata e associata con successo", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(policyId));
+        }
+    }
+
+    private async Task OpenCreateCheckDialog()
+    {
+        // 1. Definiamo i parametri in modo tipizzato
+        var parameters = new DialogParameters<AddSingleCheckDialog>
+    {
+        { x => x.AvailableMetrics, AvailableMetrics }
+    };
+
+        // 2. Opzioni della dialog
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true // Spesso utile in fase di creazione
+        };
+
+        // 3. Usiamo ShowAsync per garantire che il thread gestisca correttamente l'attesa
+        var dialog = await DialogService.ShowAsync<AddSingleCheckDialog>("Nuovo Check", parameters, options);
+
+        // 4. Attendiamo il risultato
+        var result = await dialog.Result;
+
+        // 5. Gestione post-chiusura
+        if (result != null && !result.Canceled)
+        {
+            // Se il tuo provider ha bisogno di tempo per scrivere nel DB
+            await Task.Delay(500);
+            await RefreshData();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

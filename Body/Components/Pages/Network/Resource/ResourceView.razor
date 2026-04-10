@@ -1,0 +1,422 @@
+﻿@page "/network/resource/{Id}"
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Components.Pages.Network.Resource.Check
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Request.Update
+@using GlassBoard.Response
+@using GlassBoard.Response.Add
+@using GlassBoard.Response.Get
+@using SharedLibrary.Models
+@using System.Net.Http.Headers
+@using static SharedLibrary.Enum.Enums 
+@inject IResourceService InterfaceService
+@inject IResourceProvider ResourceProvider
+@inject ITenantProvider TenantProvider
+@inject IProbeProvider ProbeProvider
+@inject IObservableProvider ObsProvider
+@inject ICheckPolicyProvider PolicyProvider
+@inject ISnackbar Snackbar
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+@if (_isInitialLoading)
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8 text-center">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.h6" Class="mt-4">Inizializzazione Risorsa...</MudText>
+    </MudContainer>
+}
+else if (_resource == null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">Risorsa non trovata o errore di caricamento via API.</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+        @* Intestazione con supporto alla Severity *@
+        <ResourceHeader Data="_resource"
+                        TenantName="@_tenantName"
+                        OrgName="@_orgName"
+                        ProbeName="@_probeName"
+                        ParentId="@_parentId"
+                        OnResourceUpdated="HandleResourceUpdated" />
+        @if(MetricNames is not null && MetricNames.Count > 0)
+        {
+            <div class="d-flex justify-end mt-2 mb-2">
+                <MudButton Variant="Variant.Filled"
+                           Color="@(_showAnalytics ? Color.Secondary : Color.Primary)"
+                           StartIcon="@Icons.Material.Filled.Timeline"
+                           OnClick="@(() => _showAnalytics = !_showAnalytics)">
+                    @(_showAnalytics ? "Nascondi Grafici" : "Mostra Grafici")
+                </MudButton>
+            </div>
+
+            @if (_showAnalytics)
+            {
+                <MudItem xs="12" Class="mb-4">
+                    <ResourceAnalyticsChart ResourceId="@Id" MetricNames="@MetricNames" />
+                </MudItem>
+            }
+        }
+
+        <MudGrid>
+            @* Sezione Attributi e Accessi *@
+            <MudItem xs="12">
+                @if (_attributeItems.Count > 0)
+                {
+                    <MudExpansionPanels MultiExpansion="false">
+                        <MudExpansionPanel Text="Attributi Risorsa" MaxHeight="1000">
+                            <TitleContent>
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                                    <MudText Typo="Typo.h6">Attributi Risorsa</MudText>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <ResourceAttributes ResourceId="@Id"
+                                                    Attributes="@_attributeItems"
+                                                    OnChanged="HandleAttributeChanged" />
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="pa-4">Nessuna Attributo Inserito</MudText>
+                }
+
+            </MudItem>
+            @if (string.IsNullOrEmpty(_parentId))
+            {
+                <MudItem xs="12">
+                    @if (_accessItems.Count > 0)
+                    {
+
+                        <MudExpansionPanels MultiExpansion="false">
+                            <MudExpansionPanel Text="Accesses" MaxHeight="1000">
+                                <TitleContent>
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                                        <MudText Typo="Typo.h6">Accesses</MudText>
+                                    </div>
+                                </TitleContent>
+                                <ChildContent>
+                                    <ResourceAccesses AccessList="@_accessItems" />
+                                </ChildContent>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="pa-4">Nessuna Access Configurato</MudText>
+                    }
+
+                </MudItem>
+            }
+
+            @* Sezione Risorse Figlie (incluse nel DTO) *@
+            <MudItem xs="12">
+            @if (_resource.Children != null && _resource.Children.Any())
+            {
+                
+                    <MudExpansionPanels MultiExpansion="false">
+                        <MudExpansionPanel Text="Children" MaxHeight="1000">
+                            <TitleContent>
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                                    <MudText Typo="Typo.h6">Children</MudText>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <ResourceChildren Children="@_resource.Children" RootId="@Id" />
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="pa-4">Nessuna Risorsa Figlia</MudText>
+                }
+            </MudItem>
+        
+
+        @* Sezione Profili: Visualizza sia i manuali che gli auto-assegnati *@
+
+        <MudItem xs="12">
+            @if (_detailedProfiles.Count > 0)
+            {
+                <MudExpansionPanels MultiExpansion="false">
+                    <MudExpansionPanel Text="CollectionProfiles" MaxHeight="1000">
+                        <TitleContent>
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                                <MudText Typo="Typo.h6">CollectionProfiles</MudText>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+
+                                <ResourceProfiles Profiles="@_detailedProfiles"
+                                                  ConfigDetails="@_configDetails"
+                                                  ResourceId="@Id"
+                                                  NamespaceName="@_namespace"
+                                                  OnProfilesUpdated="HandleProfilesUpdated"
+                                AvailableMetrics="@_resource.AvailableMetricNames" />
+
+
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+            else
+                {
+                    <MudPaper Class="pa-4 mt-2" Elevation="0" Outlined="true">
+                        <div class="d-flex align-center flex-grow-1 gap-4">
+                            <MudSelect T="string" Label="Associa un Collection Profile"
+                                       AnchorOrigin="Origin.BottomCenter"
+                                       Variant="Variant.Outlined"
+                                       Dense="true"
+                                       @bind-Value="_selectedProfileId">
+                                @foreach (var profile in ObsProvider.GetAllAvailableProfiles())
+                                {
+                                    <MudSelectItem Value="@profile.Id">@profile.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Disabled="@(string.IsNullOrEmpty(_selectedProfileId) || _isUpdating)"
+                                       OnClick="AddProfileToResource"
+                                       StartIcon="@Icons.Material.Filled.Add">
+                                Associa
+                            </MudButton>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="mt-2 d-block">Nessun profilo attualmente associato a questa risorsa.</MudText>
+                    </MudPaper>
+                }
+        </MudItem>
+            <MudItem xs="12">
+                <ResourceCheckStatus ResourceId="@Id" PolicyIds="@(_resource.CheckProfileIds)" />
+            </MudItem>
+        </MudGrid>
+ 
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public string Id { get; set; }
+
+    private ResourceItem _resource;
+    private List<AttributeItem> _attributeItems = new();
+    private List<ResourceAccesses.ResourceAccessItem> _accessItems = new();
+    private bool _showAnalytics = false;
+    private string _parentId, _tenantName, _orgName, _probeName, _namespace;
+    private Dictionary<string, string> MetricNames;
+
+    private string _selectedProfileId;
+
+    private List<CollectionProfileDetailed> _detailedProfiles = new();
+    private Dictionary<string, ObservableConfigurationDetailed> _configDetails = new();
+
+    private string _loadedId;
+    private bool _isInitialLoading = true;
+    private bool _isUpdating = false;
+
+    private async Task HandleResourceUpdated()
+    {
+        await Task.Delay(300);
+        await FullReload();
+        Snackbar.Add("Dati risorsa sincronizzati", Severity.Info);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _loadedId) return;
+        await FullReload();
+    }
+
+    private async Task HandleProfilesUpdated()
+    {
+        await ObsProvider.InitializeAsync(forceRefresh: true);
+        _loadedId = null;
+        await FullReload();
+    }
+
+    private async Task HandleAttributeChanged() => await FullReload();
+
+    private async Task FullReload()
+    {
+        if (_isUpdating) return;
+        _isUpdating = true;
+        _loadedId = Id;
+
+        try
+        {
+            // 1. Recupero risorsa e figli
+            _resource = await InterfaceService.GetResourceWithChildren(Id);
+
+            if (_resource != null)
+            {
+                MapMetricNames(_resource.ResourceTypes.First());
+
+                //await FetchMetric("network.interface.band_width_out_rate", "Outbound (B/s)", token, from, to);
+                // 2. Caricamento dati correlati (Tenant, Probe e Provider)
+                await LoadRelatedData();
+
+                // 3. Mapping Attributi
+                _attributeItems = _resource.ResourceAttributes?.Select(a => new AttributeItem
+                {
+                    Key = a.Key ?? string.Empty,
+                    Value = a.Value ?? string.Empty
+                }).ToList() ?? new List<AttributeItem>();
+
+                // 4. Mapping Accessi con l'Enum InstrumentTypes
+                _accessItems = _resource.ResourceAccesses?.Select(a => new ResourceAccesses.ResourceAccessItem
+                {
+                    Address = a.Address ?? "N/D",
+                    Instruments = a.Instruments?.Select(i =>
+                        Enum.TryParse<InstrumentTypes>(i, true, out var result) ? (int)result : 0
+                    ).ToList() ?? new List<int>(),
+                    AccessScopes = a.AccessScopes?.Select(s => int.TryParse(s, out var val) ? val : 0).ToList() ?? new List<int>()
+                }).ToList() ?? new List<ResourceAccesses.ResourceAccessItem>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore nel caricamento: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isInitialLoading = false;
+            _isUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void MapMetricNames(string resourceType)
+    {
+        MetricNames = new Dictionary<string, string>();
+        switch (resourceType)
+        {
+            case nameof(ResourceTypes.NetworkInterface):
+                MetricNames.TryAdd("network.interface.band_width_in_rate", "Inbound (Bit/s)");
+                MetricNames.TryAdd("network.interface.band_width_out_rate", "Outbound (B/s)");
+                break;
+            case nameof(ResourceTypes.Cpu):
+                MetricNames.TryAdd("system.cpu.usage_perc", "Usage Perc(%)");
+                break;
+            default:
+                break;
+        }
+    }
+
+    private async Task LoadRelatedData()
+    {
+        _detailedProfiles = new();
+        _configDetails = new();
+        _parentId ="";
+
+        if (_resource.Path is not null && _resource.Path.Contains(','))
+        {
+            _parentId = _resource.Path.Split(',', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+
+            if (_parentId is not null)
+            {
+                await ResourceProvider.InitializeAsync();
+
+                // Usiamo ?. per ogni passaggio e ?? "" alla fine per garantire una stringa non nulla
+                _namespace = ResourceProvider.Resources
+                    .FirstOrDefault(x => x.Id == _parentId)?
+                    .Attributes?
+                    .FirstOrDefault(y => y.Key == "observable-namespace")?
+                    .Value ?? string.Empty; // <-- Risolve il "Possible null reference assignment"
+            }
+        }
+        else
+        {
+            // Stessa logica di protezione qui
+            _namespace = _resource.ResourceAttributes?
+                .FirstOrDefault(y => y.Key == "observable-namespace")?
+                .Value ?? string.Empty; // <-- Risolve il "Possible null reference assignment"
+        }
+
+        // 5. Fallback opzionale: se _namespace è ancora null, assegniamo stringa vuota o valore di default
+        _namespace ??= string.Empty;
+
+        await ObsProvider.InitializeAsync();
+
+        // 2. Le assegnazioni dei nomi sono SINCRONE e immediate
+        // Leggiamo direttamente dai provider che sono già pronti in memoria
+        var names = TenantProvider.GetTenantAndOrgNames(_resource.OrganizationId);
+        _tenantName = names.TenantName;
+        _orgName = names.OrgName;
+
+        _probeName = ProbeProvider.GetProbeName(_resource.ProbeId);
+
+        // Unione ID Profili (Manual + Auto-assigned)
+        var allProfileIds = (_resource.CollectionProfileIds ?? new List<string>())
+                            .Concat(_resource.AutoAssignedCollectionProfileIds ?? new List<string>())
+                            .Distinct()
+                            .ToList();
+
+        if (allProfileIds.Any())
+        {
+            _detailedProfiles = ObsProvider.GetProfiles(allProfileIds);
+
+            var configIds = _detailedProfiles
+                .SelectMany(p => p.ObservableConfigurationIds.Select(c => c))
+                .Distinct()
+                .ToList();
+
+            _configDetails = ObsProvider.GetConfigs(configIds);
+        }
+    }
+
+    private async Task AddProfileToResource()
+    {
+        if (string.IsNullOrEmpty(_selectedProfileId) || _resource == null) return;
+
+        _isUpdating = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:EndpointAddResource"] + "/" + _resource.Id;
+
+            var requestBody = new UpdateCollectionProfileRequest
+            {
+                Id = _resource.Id,
+                CollectionProfileIds = new List<string> { _selectedProfileId }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(requestBody);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Profilo di raccolta aggiornato", Severity.Success);
+                await FullReload();
+            }
+            else
+            {
+                Snackbar.Add($"Errore API: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+}

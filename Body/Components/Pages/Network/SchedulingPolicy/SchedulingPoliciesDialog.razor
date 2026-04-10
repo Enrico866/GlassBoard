@@ -1,0 +1,47 @@
+﻿@using MudBlazor
+@using SharedLibrary.Models
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="Model.Name" Label="Nome Politica" Required="true" Variant="Variant.Outlined" />
+
+        <MudRadioGroup @bind-Value="_useCron" T="bool" Class="mt-4">
+            <MudRadio Value="false" Color="Color.Primary">Intervallo (Secondi)</MudRadio>
+            <MudRadio Value="true" Color="Color.Secondary">Espressione Cron</MudRadio>
+        </MudRadioGroup>
+
+        @if (!_useCron)
+        {
+            <MudNumericField @bind-Value="Model.IntervalInSeconds" Label="Secondi" Min="1" Variant="Variant.Outlined" Class="mt-2" />
+        }
+        else
+        {
+            <MudTextField @bind-Value="Model.Cron" Label="Cron Expression (es: 0 0 * * *)" Variant="Variant.Outlined" Class="mt-2" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public SchedulingPolicy Model { get; set; } = new();
+
+    private bool _useCron;
+
+    protected override void OnInitialized()
+    {
+        _useCron = !string.IsNullOrEmpty(Model.Cron);
+    }
+
+    void Submit()
+    {
+        if (_useCron) Model.IntervalInSeconds = null; else Model.Cron = null;
+        MudDialog.Close(DialogResult.Ok(Model));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

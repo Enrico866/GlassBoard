@@ -1,0 +1,30 @@
+﻿@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Response.Get
+@using SharedLibrary.Enum
+@using static SharedLibrary.Enum.Enums
+@inject IObservableProvider ObservableProvider
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_profile.Name" Label="Nome Profilo" Required="true" />
+        <MudSelect T="ResourceTypes" Label="Tipo Risorsa" @bind-Value="_profile.ResourceTypes">
+            @foreach (var type in Enum.GetValues<ResourceTypes>())
+            {
+                <MudSelectItem Value="@type">@type.ToString()</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSwitch T="bool" @bind-Checked="_profile.IsDefault" Label="Profilo Default" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    private CollectionProfileDetailed _profile = new();
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_profile));
+    private void Cancel() => MudDialog.Cancel();
+}

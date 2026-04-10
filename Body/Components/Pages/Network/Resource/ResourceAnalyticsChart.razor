@@ -1,0 +1,146 @@
+﻿@using System.Net.Http.Headers
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Response.Get
+@using MudBlazor
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject IAuthService AuthService
+
+<MudCard Elevation="2" Class="mt-4 w-100">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <div class="d-flex align-center">
+                <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" Class="mr-2" />
+                <MudText Typo="Typo.h6">Analisi Traffico di Rete (Last 5h)</MudText>
+            </div>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary" OnClick="LoadChartData" />
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center pa-10">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            </div>
+        }
+        else if (_series.Any())
+        {
+            @* 'w-100' e Height aumentata per una visione panoramica migliore *@
+            <div class="pa-4" style="width: 100%; overflow-x: auto;">
+                <MudChart ChartType="ChartType.Line"
+                          ChartSeries="@_series"
+                          XAxisLabels="@_xAxisLabels"
+                          Width="100%"
+                          Height="450px"
+                          ChartOptions="@_options" />
+            </div>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Nessun dato analitico disponibile per questa interfaccia.</MudAlert>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public string ResourceId { get; set; }
+    [Parameter] public Dictionary<string, string> MetricNames { get; set; }
+
+    private List<ChartSeries> _series = new();
+    private string[] _xAxisLabels = Array.Empty<string>();
+    private bool _isLoading = false;
+
+    // Configurazione avanzata: LineStrokeWidth e ShowLegend migliorano l'interazione
+    private ChartOptions _options = new()
+    {
+        InterpolationOption = InterpolationOption.NaturalSpline,
+        YAxisFormat = "N0",
+        ShowLegend = true,
+        LineStrokeWidth = 3, // Linea leggermente più spessa per facilitare l'hover
+        XAxisLines = false,
+        YAxisLines = true
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadChartData();
+
+    private async Task LoadChartData()
+    {
+        _isLoading = true;
+        _series.Clear();
+        _xAxisLabels = Array.Empty<string>();
+
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var to = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+            var from = DateTime.Now.AddHours(-5).ToString("yyyy-MM-ddTHH:mm:ss");
+
+            if(MetricNames is not null)
+            {
+                foreach (var metricName in MetricNames)
+                {
+                    await FetchMetric(metricName.Key, metricName.Value, token, from, to);
+                }
+            }
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Errore caricamento grafici: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FetchMetric(string metricName, string label, string token, string from, string to)
+    {
+        var baseUrl = Config["ResourceApi:GetChartAnalytics"] ?? "https://prismtest.hostpaas.com/enduser/charts/analytics";
+        var url = $"{baseUrl}?resourceId={ResourceId}&from={from}&to={to}&metricName={metricName}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var channel = Config["ResourceApi:Channel"];
+        if (!string.IsNullOrEmpty(channel)) request.Headers.Add("X-MYDEV-CHANNEL", channel);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            var data = await response.Content.ReadFromJsonAsync<GetChartAnalyticsResponse>();
+            if (data?.Items?.Series != null && data.Items.Series.Any())
+            {
+                _series.Add(new ChartSeries
+                {
+                    Name = label,
+                    Data = data.Items.Series[0].ToArray()
+                });
+
+                if (_xAxisLabels.Length == 0)
+                {
+                    var allX = data.Items.X;
+                    var labels = new string[allX.Count];
+
+                    // Mostriamo circa 10 punti temporali per non affollare l'asse X
+                    int step = Math.Max(1, allX.Count / 10);
+
+                    for (int i = 0; i < allX.Count; i++)
+                    {
+                        if (i % step == 0 && DateTime.TryParse(allX[i], out var date))
+                        {
+                            labels[i] = date.ToString("HH:mm");
+                        }
+                        else
+                        {
+                            labels[i] = "";
+                        }
+                    }
+                    _xAxisLabels = labels;
+                }
+            }
+        }
+    }
+}

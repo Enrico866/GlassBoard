@@ -1,0 +1,125 @@
+﻿@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Service
+@using MongoDB.Bson
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<div class="d-flex flex-wrap align-center justify-space-between gap-4 mb-4">
+    <div class="d-flex gap-2">
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small" href="/network/resources">Lista</MudButton>
+        @if (!string.IsNullOrEmpty(ParentId))
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" href="@($"/network/resource/{ParentId}")">Padre</MudButton>
+        }
+    </div>
+
+
+    <div class="d-flex flex-wrap align-center justify-end gap-3" style="flex-grow: 1;">
+        @if (string.IsNullOrEmpty(ParentId))
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.Search" Size="Size.Small" OnClick="OnDiscoveryClick" Disabled="IsProcessingDiscovery">
+                @if (IsProcessingDiscovery)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+
+                    <MudText Size="Size.Small">Discovery</MudText>
+                }
+            </MudButton>
+        }
+        <MudButton Variant="Variant.Filled" Color="@(IsObserved? Color.Error: Color.Success)" Size="Size.Small" OnClick="OnToggleMonitoring" Disabled="IsProcessing">
+            <MudText Size="Size.Small">@(IsObserved ? "Disabilita" : "Abilita")</MudText>
+        </MudButton>
+        <div class="d-flex flex-column">
+            @* Riga 1: Badge con Nome e Bottone *@
+            <div class="resource-name-badge @(IsObserved ? "observed" : "default")">
+                <div class="d-flex align-center">
+                    <MudText Typo="Typo.h5" Class="resource-name-text">@ResourceName</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                   Size="Size.Small"
+                                   Color="Color.Inherit"
+                                   Class="ml-2 opacity-70 hover-opacity-100"
+                                   OnClick="CopyToClipboard"
+                                   Title="Copia Id Risorsa" />
+                </div>
+            </div>
+
+            @* Riga 2: Data (con un piccolo margine sopra per staccarla) *@
+            <div class="d-flex align-center justify-center mt-1">
+                <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Small" Class="mr-1 mud-text-secondary" />
+                <MudText Color="@GetDateColor()" Typo="Typo.caption" Style="text-transform: uppercase; letter-spacing: 1px;" Class="mud-text-secondary">
+                    Last Monitor: <b>@FormattedDate</b>
+                </MudText>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .resource-name-badge {
+        padding: 8px 24px;
+        border-radius: 50px;
+        display: inline-flex;
+        align-items: center;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+    }
+
+    /* Stato: Monitorato (Verde) */
+    .resource-name-badge.observed {
+        background-color: var(--mud-palette-success-hover); /* Sfondo leggero */
+        color: var(--mud-palette-success-darken);
+        border-color: var(--mud-palette-success);
+        box-shadow: 0 0 10px rgba(0, 200, 83, 0.2);
+    }
+
+    /* Stato: Non Monitorato (Grigio) */
+    .resource-name-badge.not-observed {
+        background-color: var(--mud-palette-grey-lighten);
+        color: var(--mud-palette-grey-darken);
+        border-color: var(--mud-palette-grey-default);
+    }
+
+    .resource-name-text {
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+</style>
+
+@code {
+    [Parameter] public required string ResourceName { get; set; }
+    [Parameter] public required string ResourceId { get; set; }
+    [Parameter] public required string LastMonitorDate { get; set; }
+    [Parameter] public required string ParentId { get; set; }
+    [Parameter] public bool IsObserved { get; set; }
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public bool IsProcessingDiscovery { get; set; }
+    [Parameter] public EventCallback OnDiscoveryClick { get; set; }
+    [Parameter] public EventCallback OnToggleMonitoring { get; set; }
+
+    private Color GetDateColor()
+    {
+        if (!DateTime.TryParse(LastMonitorDate, out var dt)) return Color.Secondary;
+        // Se l'ultimo monitoraggio è più vecchio di 1 ora, diventa Warning
+        return (DateTime.Now - dt).TotalHours > 1 ? Color.Warning : Color.Secondary;
+    }
+
+    private string FormattedDate => DateTime.TryParse(LastMonitorDate, out var dt)
+                                    ? dt.ToString("dd/MM/yyyy HH:mm")
+                                    : LastMonitorDate;
+
+    private async Task CopyToClipboard()
+    {
+        if (string.IsNullOrWhiteSpace(ResourceId)) return;
+
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", ResourceId);
+        Snackbar.Add("Copiato!", Severity.Info, config => { config.ShowCloseIcon = false; config.VisibleStateDuration = 2000; });
+    }
+}

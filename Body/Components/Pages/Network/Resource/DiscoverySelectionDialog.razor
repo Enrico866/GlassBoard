@@ -1,0 +1,66 @@
+﻿@using MudBlazor
+@using GlassBoard.Abstractions @* Assicurati che il namespace dell'Enum sia corretto *@
+@using static SharedLibrary.Enum.Enums
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+            Avvia Discovery
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Seleziona gli strumenti per l'indirizzo: <b>@Address</b>
+        </MudAlert>
+
+        <div class="d-flex flex-column gap-1">
+            @foreach (var inst in AvailableInstruments)
+            {
+                <MudCheckBox T="bool"
+                             Label="@inst.ToString()"
+                             Value="@(_selectedInstruments.Contains(inst))"
+                             ValueChanged="@((bool val) => OnCheckChanged(inst, val))"
+                             Color="Color.Primary"
+                             Dense="true" />
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Color="Color.Info"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(!_selectedInstruments.Any())">
+            Avvia (@_selectedInstruments.Count)
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public List<InstrumentTypes> AvailableInstruments { get; set; } = new();
+    [Parameter] public string Address { get; set; }
+
+    private HashSet<InstrumentTypes> _selectedInstruments = new();
+
+    protected override void OnInitialized()
+    {
+        // Di default, se c'è un solo strumento lo selezioniamo automaticamente
+        if (AvailableInstruments.Count == 1)
+        {
+            _selectedInstruments.Add(AvailableInstruments.First());
+        }
+    }
+
+    private void OnCheckChanged(InstrumentTypes inst, bool isChecked)
+    {
+        if (isChecked) _selectedInstruments.Add(inst);
+        else _selectedInstruments.Remove(inst);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_selectedInstruments.ToList()));
+}

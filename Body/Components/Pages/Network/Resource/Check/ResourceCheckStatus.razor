@@ -1,0 +1,179 @@
+﻿@using System.Net.Http.Headers
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject IAuthService AuthService
+
+<MudExpansionPanels MultiExpansion="true" Class="mt-4">
+    <MudExpansionPanel Expanded="true">
+        <TitleContent>
+            <div class="d-flex align-center gap-3">
+                <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                <MudText Typo="Typo.h6">Policy di Monitoraggio</MudText>
+                @if (_loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Secondary" />
+                }
+                else
+                {
+                    <MudBadge Content="@(_activeProfiles?.Count ?? 0)" Color="Color.Info" Overlap="true" Class="ml-2" />
+                }
+            </div>
+        </TitleContent>
+        <ChildContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Color="Color.Info" Indeterminate="true" Class="my-4" />
+            }
+            else if (_activeProfiles == null || !_activeProfiles.Any())
+            {
+                <MudAlert Severity="Severity.Info">Nessuna policy di monitoraggio attiva per questa risorsa.</MudAlert>
+            }
+            else
+            {
+                @foreach (var profile in _activeProfiles)
+                {
+                    <div class="mb-4 pa-2" style="border-left: 4px solid var(--mud-palette-secondary); background: var(--mud-palette-background-grey); border-radius: 4px;">
+                        <MudText Typo="Typo.subtitle1" Class="ml-2"><b>@profile.Name</b></MudText>
+
+                        @* Forziamo il tipo T="CheckModel" e usiamo una variabile di contesto esplicita *@
+                        <MudTable Items="@profile.RuleDetails" Dense="true" Hover="true" Elevation="0" T="CheckModel" Class="mt-2">
+                            <HeaderContent>
+                                <MudTh>Check</MudTh>
+                                <MudTh>Esito</MudTh>
+                                <MudTh>Ultima Esecuzione</MudTh>
+                            </HeaderContent>
+                            <RowTemplate Context="contextoCheck">
+                                <MudTd DataLabel="Check">
+                                    <div class="d-flex flex-column">
+                                        <MudText Typo="Typo.body2">@contextoCheck.Name</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@contextoCheck.Category</MudText>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Esito">
+                                    <MudChip T="string"
+                                             Icon="@GetIconForId(contextoCheck.Id)"
+                                             Color="@GetColorForId(contextoCheck.Id)"
+                                             Size="Size.Small"
+                                             Variant="Variant.Text">
+                                        @GetResultTextForId(contextoCheck.Id)
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Ultima Esecuzione">
+                                    <MudText Typo="Typo.caption">
+                                        @GetDateForId(contextoCheck.Id)
+                                    </MudText>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                }
+            }
+        </ChildContent>
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    [Parameter] public string ResourceId { get; set; }
+    [Parameter] public List<string> PolicyIds { get; set; }
+
+    private List<CheckPolicyModels> _activeProfiles = new();
+    private List<CheckResourceResultModel> _checkResults = new();
+    private bool _loading = true;
+
+    // METODI HELPER DIRETTI - Risolvono l'errore "does not exist in current context"
+    private string GetResultTextForId(string checkId) =>
+        _checkResults?.FirstOrDefault(r => r.CheckId == checkId)?.Result ?? "N/D";
+
+    private Color GetColorForId(string checkId)
+    {
+        var res = _checkResults?.FirstOrDefault(r => r.CheckId == checkId);
+        if (res == null) return Color.Default;
+        return res.Result == "Success" ? Color.Success : Color.Error;
+    }
+
+    private string GetIconForId(string checkId)
+    {
+        var res = _checkResults?.FirstOrDefault(r => r.CheckId == checkId);
+        if (res == null) return Icons.Material.Filled.Help;
+        return res.Result == "Success" ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error;
+    }
+
+    private string GetDateForId(string checkId)
+    {
+        var res = _checkResults?.FirstOrDefault(r => r.CheckId == checkId);
+        return res != null ? res.ModifiedOn.ToString("dd/MM/yyyy HH:mm") : "Mai eseguito";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(ResourceId)) await LoadAllData();
+    }
+
+    private async Task LoadAllData()
+    {
+        _loading = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+
+            // 1. Carica Risultati
+            var resResponse = await SendGetRequest(Config["ResourceApi:ChecksResourcesResultUrl"], token);
+            if (resResponse.IsSuccessStatusCode)
+            {
+                var data = await resResponse.Content.ReadFromJsonAsync<GetCheckResourceResultHttpResponse>();
+                _checkResults = data?.Items?.Where(i => i.ResourceId == ResourceId).ToList() ?? new();
+            }
+
+            // 2. Carica Policy
+            var polResponse = await SendGetRequest(Config["ResourceApi:CheckPoliciesUrl"], token);
+            if (polResponse.IsSuccessStatusCode)
+            {
+                var policyData = await polResponse.Content.ReadFromJsonAsync<GetCheckPolicyHttpResponse>();
+                if (policyData?.Items != null && PolicyIds != null)
+                {
+                    _activeProfiles = policyData.Items.Where(p => PolicyIds.Contains(p.Id)).ToList();
+
+                    // 3. Carica Check e mappa i dettagli
+                    var checksResponse = await SendGetRequest(Config["ResourceApi:ChecksUrl"], token);
+                    if (checksResponse.IsSuccessStatusCode)
+                    {
+                        var allChecksData = await checksResponse.Content.ReadFromJsonAsync<GetCheckHttpResponse>();
+                        var allChecksList = allChecksData?.Items ?? new List<CheckModel>();
+
+                        foreach (var profile in _activeProfiles)
+                        {
+                            // Filtro manuale per evitare ambiguità di delegate
+                            var matching = new List<CheckModel>();
+                            foreach (var id in profile.CheckIds)
+                            {
+                                var match = allChecksList.FirstOrDefault(c => c.Id == id);
+                                if (match != null) matching.Add(match);
+                            }
+                            profile.RuleDetails = matching;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) { Console.WriteLine(ex.Message); }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendGetRequest(string url, string token)
+    {
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+    
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+        request.Headers.Add("X-MYDEV-APPNAME", "glass");
+        return await Http.SendAsync(request);
+    }
+}

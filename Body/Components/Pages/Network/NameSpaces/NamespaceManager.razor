@@ -1,0 +1,245 @@
+﻿@page "/network/namespace-manager"
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Request.Add
+@using GlassBoard.Response.Get
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject ISnackbar Snackbar
+@inject IAuthService AuthService
+@inject IObservableProvider ObservableProvider
+@inject INamespaceProvider NamespaceProvider
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudPaper Class="pa-6">
+        <MudText Typo="Typo.h5" Class="mb-4">Gestione Namespace</MudText>
+
+        <MudGrid>
+            @* Selezione Namespace Esistente *@
+            <MudItem xs="12" md="6">
+                <MudSelect T="NamespaceModel" Label="Modifica Namespace esistente"
+                           Value="_selectedNamespace" ValueChanged="OnNamespaceChanged"
+                           Variant="Variant.Outlined" Clearable="true" Placeholder="Nuovo Namespace"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var ns in NamespaceProvider.namespaces)
+                    {
+                        <MudSelectItem Value="@ns">@ns.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            @* Nome Namespace *@
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_namespaceName"
+                              Label="Nome Namespace"
+                              Variant="Variant.Outlined"
+                              Required="true" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-4" />
+            </MudItem>
+
+            @* --- AREA SELEZIONE OBSERVABLE --- *@
+
+            <MudItem xs="12" md="7">
+                <MudTable Items="@_allObservables"
+                          MultiSelection="true"
+                          @bind-SelectedItems="_selectedObsSet"
+                          Hover="true"
+                          Dense="true"
+                          FixedHeader="true"
+                          Height="450px"
+                          Filter="new Func<ObservableConfigurationDetailed,bool>(FilterFunc)"
+                          T="ObservableConfigurationDetailed">
+                    <ToolBarContent>
+                        <MudText Typo="Typo.h6">Sorgenti Disponibili</MudText>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchString"
+                                      Placeholder="Filtra per nome o instrument..."
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      IconSize="Size.Medium"
+                                      Class="mt-0"
+                                      Clearable="true" />
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh>Nome</MudTh>
+                        <MudTh>Instrument</MudTh>
+                        <MudTh>Collector ID</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Nome">@context.Name</MudTd>
+                        <MudTd DataLabel="Instrument">@context.Instrument</MudTd>
+                        @* Nota: CollectorInfo espone solo Id nel tuo modello attuale *@
+                        <MudTd DataLabel="Collector">@context.Collector?.Id</MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudItem>
+
+            <MudItem xs="12" md="5">
+                <MudPaper Outlined="true" Class="pa-4" Style="height: 530px; display:flex; flex-direction:column; background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.h6" Class="mb-2">Selezionate per il Namespace (@_selectedObsSet.Count)</MudText>
+                    <div style="overflow-y:auto; flex-grow:1;">
+                        <MudList T="ObservableConfigurationDetailed">
+                            @if (!_selectedObsSet.Any())
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">Seleziona le observable dalla tabella a sinistra</MudAlert>
+                            }
+                            @foreach (var obs in _selectedObsSet.OrderBy(x => x.Name))
+                            {
+                                <MudListItem T="ObservableConfigurationDetailed">
+                                    <div class="d-flex align-center justify-space-between">
+                                        <div class="d-flex flex-column">
+                                            <MudText Typo="Typo.body2"><b>@obs.Name</b></MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@obs.Instrument</MudText>
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       OnClick="@(() => _selectedObsSet.Remove(obs))" />
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex justify-end mt-6">
+                <MudButton Variant="Variant.Filled"
+                           Color="@(_selectedNamespace == null ? Color.Primary : Color.Secondary)"
+                           Size="Size.Large"
+                           OnClick="SubmitNamespace"
+                           Disabled="@(_loading || string.IsNullOrWhiteSpace(_namespaceName))">
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    @(_selectedNamespace == null ? "Crea Namespace" : "Salva Modifiche")
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string _namespaceName = "";
+    private string? _currentId = null;
+    private bool _loading = false;
+    private string _searchString = "";
+
+    private NamespaceModel? _selectedNamespace;
+    private List<ObservableConfigurationDetailed> _allObservables = new();
+
+    // HashSet garantisce che la selezione non si resetti cambiando filtri o pagine
+    private HashSet<ObservableConfigurationDetailed> _selectedObsSet = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            await Task.WhenAll(
+                ObservableProvider.InitializeAsync(),
+                NamespaceProvider.InitializeAsync()
+            );
+
+            // Correzione: Il provider espone 'configCache' che è un Dictionary
+            if (ObservableProvider.configCache != null)
+            {
+                _allObservables = ObservableProvider.configCache.Values.ToList();
+            }
+        }
+        finally { _loading = false; }
+    }
+
+    private void OnNamespaceChanged(NamespaceModel? ns)
+    {
+        _selectedNamespace = ns;
+        _selectedObsSet.Clear();
+        _searchString = "";
+
+        if (ns != null)
+        {
+            _namespaceName = ns.Name;
+            _currentId = ns.Id;
+
+            if (ns.observableConfigurationIds?.Any() == true)
+            {
+                var nsIds = ns.observableConfigurationIds.ToHashSet();
+
+                // Filtriamo gli oggetti reali dalla lista completa in base agli ID del namespace
+                var matches = _allObservables.Where(x => x.Id != null && nsIds.Contains(x.Id)).ToList();
+                foreach (var match in matches)
+                {
+                    _selectedObsSet.Add(match);
+                }
+            }
+        }
+        else
+        {
+            _namespaceName = "";
+            _currentId = null;
+        }
+    }
+
+    private bool FilterFunc(ObservableConfigurationDetailed obs)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (obs.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (obs.Instrument?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private async Task SubmitNamespace()
+    {
+        _loading = true;
+        try
+        {
+            var payload = new AddNamespaceHttpRequest
+            {
+                Id = _currentId,
+                Name = _namespaceName,
+                // Estraiamo gli ID dal set di oggetti selezionati
+                ObservableConfigurationIds = _selectedObsSet.Select(x => x.Id).ToList()
+            };
+
+            var url = Config["ResourceApi:NamespacesUrl"].ToString().Replace("s/","");
+            //var token = await AuthService.GetAccessTokenByParamAsync(Config["Tenant:Admin:User"], Config["Tenant:Admin:Password"]);
+            var token = await AuthService.GetContextAccessTokenAsync();
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Headers.Add("X-MYDEV-APPNAME", "GlassBoard");
+            request.Content = JsonContent.Create(payload);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Operazione completata con successo!", Severity.Success);
+                await NamespaceProvider.InitializeAsync(forceRefresh: true);
+                OnNamespaceChanged(null); // Reset del form
+            }
+            else
+            {
+                var errorDetail = await response.Content.ReadAsStringAsync();
+                // Log per debug in caso di errore 400
+                Console.WriteLine($"[JSON INVIATO]: {System.Text.Json.JsonSerializer.Serialize(payload)}");
+                Console.WriteLine($"[ERRORE API]: {errorDetail}");
+                Snackbar.Add("Errore durante il salvataggio dei dati", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore critico: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+}

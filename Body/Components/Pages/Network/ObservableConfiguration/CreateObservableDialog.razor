@@ -1,0 +1,313 @@
+﻿@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Extension
+@using GlassBoard.Request.Add
+@using GlassBoard.Response.Get
+@using SharedLibrary.Enum
+@using static SharedLibrary.Enum.Enums
+@inject IObservableProvider ObservableProvider
+@inject IDialogService DialogService
+@inject ICollectorProvider CollectorProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_config.Name" Label="Nome Configurazione*" Required="true" Class="mb-2" />
+        <MudTextField @bind-Value="_config.Description" Label="Descrizione" Class="mb-2" />
+
+        <MudSelect T="string" Label="Seleziona Collector" @bind-Value="_config.Collector.Id" Required="true" Class="mb-2">
+            @foreach (var collector in CollectorProvider.GetCollectors())
+            {
+                <MudSelectItem Value="@collector.Id">@collector.TaskName (@collector.Description)</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="string" Label="Instrument" Value="@_config.Instrument" ValueChanged="OnInstrumentChanged" Class="mb-4">
+            @foreach (var type in Enum.GetValues<InstrumentTypes>())
+            {
+                <MudSelectItem Value="@type.ToString()">@type.ToString()</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (_config.Instrument == "Snmp")
+        {
+            <MudPaper Class="pa-4 my-4" Elevation="1" Outlined="true">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    <strong>@( _editingDetail == null ? "Nuovo Dettaglio OID" : "Modifica Dettaglio OID" )</strong>
+                </MudText>
+
+                <MudRadioGroup @bind-Value="_snmpMode" Class="mb-3">
+                    <MudRadio Value="@("Scalar")" Color="Color.Primary">Scalar</MudRadio>
+                    <MudRadio Value="@("Table")" Color="Color.Primary">Table</MudRadio>
+                </MudRadioGroup>
+
+                @if (_snmpMode == "Scalar")
+                {
+                    <MudTextField @bind-Value="_config.ScalarOidTemplate" Label="Scalar OID Template" Placeholder="1.3.6.1..." Class="mb-3" />
+                }
+                else
+                {
+                    <MudTextField @bind-Value="_config.TableOidTemplate" Label="Table OID Template" Placeholder="1.3.6.1..." Class="mb-3" />
+                }
+
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudTextField @bind-Value="_tempDetail.Name" Label="Nome Dettaglio/Colonna" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudSelect T="string" @bind-Value="_tempDetail.ResultType" Label="Tipo Risultato" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="@("Metric")">Metric</MudSelectItem>
+                            <MudSelectItem Value="@("StructuredData")">Structured Data</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                <MudGrid Class="mt-2">
+                    @if (_snmpMode == "Scalar")
+                    {
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="_tempDetail.MetricKind" Label="Metric Kind" Class="mb-2" />
+                            <MudSelect T="string" @bind-Value="_tempDetail.MetricUnit" Label="Metric Unit" AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var unit in _units)
+                                {
+                                    <MudSelectItem Value="@unit.GetDescription()">@unit.ToString()</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="_tempDetail.Conversion" Label="Conversion (opzionale)" Clearable="true" />
+                            <MudTextField @bind-Value="_tempAttrInput"
+                                          Label="Datapoint Attributes"
+                                          Placeholder="tag1, tag2"
+                                          HelperText="Separati da virgola"
+                                          Clearable="true" />
+                        </MudItem>
+                    }
+                    else
+                    {
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_tempDetail.ColumnOrdinal" Label="Column Ordinal" HelperText="Indice della colonna nella tabella SNMP" />
+                        </MudItem>
+                    }
+                </MudGrid>
+
+                <div class="d-flex align-center mt-4">
+                    <MudButton OnClick="AddOrUpdateDetail"
+                               Color="@(_editingDetail == null ? Color.Secondary : Color.Warning)"
+                               Variant="Variant.Filled"
+                               StartIcon="@(_editingDetail == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Check)">
+                        @(_editingDetail == null ? "Aggiungi al set" : "Aggiorna Dettaglio")
+                    </MudButton>
+
+                    @if (_editingDetail != null)
+                    {
+                        <MudButton OnClick="CancelEdit" Variant="Variant.Text" Class="ml-2">Annulla</MudButton>
+                    }
+                </div>
+            </MudPaper>
+
+            <div class="mt-6">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Dettagli configurati (@_config.Details.Count):</MudText>
+                <MudTable Items="_config.Details" Hover="true" Dense="true" Elevation="0" Outlined="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Nome</MudTh>
+                        <MudTh>Oid</MudTh>
+                        <MudTh>Tipo</MudTh>
+                        <MudTh>Specifica</MudTh>
+                        <MudTh Style="text-align:right">Azioni</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="detail">
+                        <MudTd DataLabel="Nome">@detail.Name</MudTd>
+                        @if (_config.ScalarOidTemplate is not null)
+                        {
+                            <MudTd DataLabel="Oid">@_config.ScalarOidTemplate</MudTd>
+                        }
+                        else
+                        {
+                            <MudTd DataLabel="Oid">@_config.TableOidTemplate</MudTd>
+                        }
+                        <MudTd DataLabel="Tipo">@detail.ResultType</MudTd>
+                        <MudTd DataLabel="Specifica">
+                            @if (detail.ResultType == "Metric")
+                            {
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.caption">Kind: <b>@detail.MetricKind</b> | Unit: <b>@detail.MetricUnit</b></MudText>
+                                    @if (detail.DatapointAttributes?.Any() == true)
+                                    {
+                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                            @foreach (var attr in detail.DatapointAttributes)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text">@attr</MudChip>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption">Ordinal: <b>@detail.ColumnOrdinal</b></MudText>
+                            }
+                        </MudTd>
+                        <MudTd Style="text-align:right">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Info" OnClick="() => StartEditDetail(detail)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => _config.Details.Remove(detail)" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Salva Configurazione</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public ObservableConfigurationDetailed? ConfigToEdit { get; set; }
+    [Parameter] public bool IsDuplicate { get; set; }
+
+    private GlassBoard.Response.Get.ObservableDetail _tempDetail = new();
+    private GlassBoard.Response.Get.ObservableDetail? _editingDetail = null;
+    private string _tempAttrInput = "";
+    private IEnumerable<MetricUnits> _units = Enum.GetValues<MetricUnits>();
+    private string _snmpMode = "Scalar";
+
+    private ObservableConfigurationDetailed _config = new() { Collector = new CollectorInfo() };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CollectorProvider.InitializeAsync();
+
+        if (ConfigToEdit != null)
+        {
+            _config = new ObservableConfigurationDetailed
+            {
+                Id = IsDuplicate ? null : ConfigToEdit.Id,
+                Name = IsDuplicate ? $"{ConfigToEdit.Name} (Copia)" : ConfigToEdit.Name,
+                Description = ConfigToEdit.Description,
+                Instrument = ConfigToEdit.Instrument,
+                Collector = new CollectorInfo { Id = ConfigToEdit.Collector?.Id },
+                ScalarOidTemplate = ConfigToEdit.ScalarOidTemplate,
+                TableOidTemplate = ConfigToEdit.TableOidTemplate,
+                Details = ConfigToEdit.Details.Select(d => new GlassBoard.Response.Get.ObservableDetail
+                {
+                    Name = d.Name,
+                    ResultType = d.ResultType,
+                    ColumnOrdinal = d.ColumnOrdinal,
+                    MetricKind = d.MetricKind,
+                    MetricUnit = d.MetricUnit,
+                    Conversion = d.Conversion,
+                    DatapointAttributes = d.DatapointAttributes != null ? new List<string>(d.DatapointAttributes) : null
+                }).ToList()
+            };
+
+            _snmpMode = !string.IsNullOrEmpty(_config.ScalarOidTemplate) ? "Scalar" : "Table";
+        }
+        else if (CollectorProvider.GetCollectors().Any())
+        {
+            _config.Collector.Id = CollectorProvider.GetCollectors().First().Id;
+        }
+    }
+
+    private void OnInstrumentChanged(string val)
+    {
+        _config.Instrument = val;
+        _config.Details.Clear();
+        CancelEdit();
+    }
+
+    private void StartEditDetail(GlassBoard.Response.Get.ObservableDetail detail)
+    {
+        _editingDetail = detail;
+        _tempDetail.Name = detail.Name;
+        _tempDetail.ResultType = detail.ResultType;
+        _tempDetail.MetricKind = detail.MetricKind;
+        _tempDetail.MetricUnit = detail.MetricUnit;
+        _tempDetail.Conversion = detail.Conversion;
+        _tempDetail.ColumnOrdinal = detail.ColumnOrdinal;
+        _tempAttrInput = detail.DatapointAttributes != null ? string.Join(", ", detail.DatapointAttributes) : "";
+    }
+
+    private void CancelEdit()
+    {
+        _editingDetail = null;
+        _tempDetail = new();
+        _tempAttrInput = "";
+    }
+
+    private void AddOrUpdateDetail()
+    {
+        if (string.IsNullOrWhiteSpace(_tempDetail.Name)) return;
+
+        var attributes = string.IsNullOrWhiteSpace(_tempAttrInput)
+            ? null
+            : _tempAttrInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        if (_editingDetail != null)
+        {
+            // Aggiornamento riferimento esistente
+            _editingDetail.Name = _tempDetail.Name;
+            _editingDetail.ResultType = _tempDetail.ResultType;
+            _editingDetail.ColumnOrdinal = _tempDetail.ColumnOrdinal;
+            _editingDetail.MetricKind = _tempDetail.MetricKind;
+            _editingDetail.MetricUnit = _tempDetail.MetricUnit;
+            _editingDetail.Conversion = _tempDetail.Conversion;
+            _editingDetail.DatapointAttributes = attributes;
+        }
+        else
+        {
+            // Nuovo inserimento
+            _config.Details.Add(new GlassBoard.Response.Get.ObservableDetail
+            {
+                Name = _tempDetail.Name,
+                ResultType = _tempDetail.ResultType,
+                ColumnOrdinal = _tempDetail.ColumnOrdinal,
+                MetricKind = _tempDetail.MetricKind,
+                MetricUnit = _tempDetail.MetricUnit,
+                Conversion = _tempDetail.Conversion,
+                DatapointAttributes = attributes
+            });
+        }
+
+        CancelEdit();
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        if (_snmpMode == "Scalar") _config.TableOidTemplate = null;
+        else _config.ScalarOidTemplate = null;
+
+        var requestDto = new AddConfigurationRequest
+        {
+            Id = _config.Id,
+            Name = _config.Name,
+            Description = _config.Description,
+            Instrument = _config.Instrument,
+            ScalarOidTemplate = _config.ScalarOidTemplate,
+            TableOidTemplate = _config.TableOidTemplate,
+            CollectorId = Guid.TryParse(_config.Collector?.Id, out var guid) ? guid : null,
+            Details = _config.Details
+        };
+
+        if (ConfigToEdit != null && !IsDuplicate)
+        {
+            var success = await ObservableProvider.UpdateConfigurationAsync(_config.Id, requestDto);
+            if (success == "SUCCESS") 
+            {
+                Snackbar.Add("Aggiornamento completato con successo!", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(_config.Id));
+            }
+        }
+        else
+        {
+            var newId = await ObservableProvider.CreateConfigurationAsync(new List<AddConfigurationRequest> { requestDto });
+            if (newId != null) 
+            {
+                Snackbar.Add("Inserimento completato con successo!", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(newId));
+            }
+        }
+    }
+}

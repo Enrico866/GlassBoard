@@ -1,0 +1,348 @@
+﻿@using System.Net.Http.Headers
+@using GlassBoard.Abstractions
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Provider
+@using GlassBoard.Request
+@using GlassBoard.Request.Update
+@using GlassBoard.Response
+@using GlassBoard.Response.Get
+@using MudBlazor
+@inject ISnackbar Snackbar
+@inject IAuthService AuthService
+@inject IConfiguration Config
+@inject HttpClient Http
+@inject IObservableProvider ObsProvider
+@inject INamespaceProvider NamespaceProvider
+
+@if (Profiles == null)
+{
+    <MudProgressLinear Color="Color.Info" Indeterminate="true" />
+}
+else if (!Profiles.Any())
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="1" Style="border-left: 4px solid var(--mud-palette-info);">
+        <div class="d-flex align-center gap-4">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Info" />
+            <MudSelect T="string"
+                       Label="Seleziona Profilo per attivare la raccolta"
+                       @bind-Value="_selectedProfileId"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense="true"
+                       Class="flex-grow-1">
+                <MudSelectItem Value="@("")">-- Scegli un profilo --</MudSelectItem>
+                @foreach (var p in _availableProfiles)
+                {
+                    <MudSelectItem Value="@p.Id">@p.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="ReplaceProfile"
+                       Loading="_isSaving"
+                       Disabled="@(string.IsNullOrEmpty(_selectedProfileId))"
+                       StartIcon="@Icons.Material.Filled.PlayArrow">
+                Attiva
+            </MudButton>
+        </div>
+    </MudPaper>
+}
+else
+{
+    @foreach (var profile in Profiles)
+    {
+        <MudCard Elevation="2" Class="mb-6">
+            <MudCardHeader Class="pb-2 border-b">
+                <CardHeaderContent>
+                    <div class="d-flex align-center justify-space-between flex-wrap gap-y-2">
+                        <div class="d-flex align-center gap-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" />
+                            <div>
+                                <div class="d-flex align-center gap-2">
+                                    <MudText Typo="Typo.subtitle1"><b>@profile.Name</b></MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">ATTIVO</MudChip>
+                                    <!--<MudChip T="string" Size="Size.Small" Color="Color.Inherit" Variant="Variant.Filled">@ConfigDetails[profile.Id].Instrument</MudChip>-->
+                                </div>
+                                <div class="d-flex align-center gap-2 mt-1">
+                                    <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Style="opacity:0.6" />
+                                    <MudText Typo="Typo.caption" Style="opacity:0.7">
+                                        Pianificazione: <b>@(profile.Info?.Name ?? "N/D")</b>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="ml-2" Style="opacity:0.4">ID: @profile.Id</MudText>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-center gap-2" style="min-width: 350px; max-width: 500px;">
+                            <MudSelect T="string"
+                                       Label="Sostituisci profilo attuale"
+                                       Value="@_selectedProfileId"
+                                       ValueChanged="OnProfileSelectionChanged"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Dense="true"
+                                       Class="flex-grow-1 bg-white">
+                                @foreach (var p in _availableProfiles)
+                                {
+                                    <MudSelectItem Value="@p.Id">@p.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudTooltip Text="Conferma Sostituzione">
+                                <MudIconButton Icon="@Icons.Material.Filled.PublishedWithChanges"
+                                               Color="Color.Warning"
+                                               Variant="Variant.Filled"
+                                               OnClick="ReplaceProfile"
+                                               Disabled="@(IsCurrentSelection(_selectedProfileId) || string.IsNullOrEmpty(_selectedProfileId))"
+                                               Size="Size.Small" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pt-4">
+                <MudTable Items="@GetConfigList(profile)" T="ObservableConfigurationDetailed" Context="config"
+                          Dense="true" Hover="true" Elevation="0"
+                          Class="mud-table-bordered fixed-layout-table">
+                    <HeaderContent>
+                        <MudTh Style="width: 25%;">Descrizione</MudTh>
+                        <MudTh Style="width: 35%;">Dettagli OID</MudTh>
+                        <MudTh Style="width: 30%;">Metriche</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Descrizione">
+                            <div class="d-flex flex-column truncate-container">
+                                <MudText Typo="Typo.body2" Class="fw-bold truncate-text">@config.Name</MudText>
+                                <MudText Typo="Typo.caption" Style="font-size: 0.7rem; opacity: 0.6;">@config.Id</MudText>
+                            </div>
+                        </MudTd>
+                        <MudTd DataLabel="Dettagli OID">
+                            <div class="oid-container">
+                                @if (!string.IsNullOrEmpty(config.ScalarOidTemplate))
+                                {
+                                    <span class="oid-label">Scalar:</span>
+                                    <span class="oid-value">@config.ScalarOidTemplate</span>
+                                }
+                                else if (!string.IsNullOrEmpty(config.TableOidTemplate))
+                                {
+                                    <span class="oid-label">Table:</span>
+                                    <span class="oid-value">@config.TableOidTemplate</span>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Surface">Tabellare / Complesso</MudText>
+                                }
+                            </div>
+                        </MudTd>
+                        <MudTd DataLabel="Metriche">
+                            <div class="d-flex flex-wrap gap-1 metrics-wrapper">
+                                @foreach (var detail in config.Details)
+                                {
+                                    var isAvailable = IsMetricAvailable(detail.Name);
+                                    <MudTooltip Text="@(isAvailable ? "Metrica correttamente raccolta" : "Metrica non ancora rilevata")">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@(isAvailable ? Color.Success : Color.Info)"
+                                                 Variant="@(isAvailable ? Variant.Filled : Variant.Text)"
+                                                 Icon="@(isAvailable ? Icons.Material.Filled.CheckCircle : null)"
+                                                 Class="metric-chip">
+                                            @detail.Name
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                            </div>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    }
+}
+
+<style>
+    /* Forza la tabella a non superare il contenitore */
+    .fixed-layout-table {
+        table-layout: fixed !important;
+        width: 100%;
+    }
+
+    /* Gestione OID lungo */
+    .oid-container {
+        font-family: 'Roboto Mono', monospace;
+        font-size: 0.75rem;
+        word-wrap: break-word; /* Rompe l'OID se troppo lungo */
+        overflow-wrap: break-word;
+        max-width: 100%;
+        display: block;
+    }
+
+    .oid-label {
+        font-weight: 700;
+        color: var(--mud-palette-primary);
+        margin-right: 4px;
+    }
+
+    .oid-value {
+        color: var(--mud-palette-text-secondary);
+    }
+
+    /* Tronca il nome se eccessivo */
+    .truncate-container {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .truncate-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Gestione wrap delle chip metriche */
+    .metrics-wrapper {
+        max-width: 100%;
+    }
+
+    .metric-chip {
+        max-width: 200px; /* Evita chip chilometriche */
+    }
+
+        .metric-chip .mud-chip-content {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    .fw-bold {
+        font-weight: 600;
+    }
+</style>
+
+@code {
+    [Parameter] public string ResourceId { get; set; }
+    [Parameter] public string NamespaceName { get; set; }
+    [Parameter] public List<CollectionProfileDetailed> Profiles { get; set; }
+    [Parameter] public Dictionary<string, ObservableConfigurationDetailed> ConfigDetails { get; set; }
+    [Parameter] public List<string> AvailableMetrics { get; set; } = new(); // Nuovo Parametro
+    [Parameter] public EventCallback OnProfilesUpdated { get; set; }
+
+    private bool _isSaving;
+    private string _selectedProfileId;
+    private List<CollectionProfileDetailed> _availableProfiles = new();
+    private NamespaceModel? actualNamespace;
+
+    // Logica di confronto
+    private bool IsMetricAvailable(string metricName)
+    {
+        if (AvailableMetrics == null || string.IsNullOrEmpty(metricName)) return false;
+        return AvailableMetrics.Any(m => m.Equals(metricName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool IsCurrentSelection(string id) => Profiles != null && Profiles.Any(p => p.Id == id);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await InitializeNamespaceAsync();
+
+        if (Profiles != null && Profiles.Any())
+        {
+            var activeId = Profiles.First().Id;
+            if (_selectedProfileId != activeId && !_isSaving)
+            {
+                _selectedProfileId = activeId;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableProfiles();
+        await InitializeNamespaceAsync();
+    }
+
+    private async Task InitializeNamespaceAsync()
+    {
+        await NamespaceProvider.InitializeAsync();
+        actualNamespace = NamespaceProvider.namespaces.FirstOrDefault(c => c.Name == NamespaceName);
+
+        // Importante: notifica a Blazor che i dati per il filtro di GetConfigList sono pronti
+        StateHasChanged();
+    }
+
+    private async Task LoadAvailableProfiles()
+    {
+        await ObsProvider.InitializeAsync();
+        _availableProfiles = ObsProvider.GetAllAvailableProfiles();
+    }
+
+    private void OnProfileSelectionChanged(string newValue)
+    {
+        _selectedProfileId = newValue;
+    }
+
+    private async Task ReplaceProfile()
+    {
+        if (string.IsNullOrEmpty(_selectedProfileId)) return;
+
+        _isSaving = true;
+        try
+        {
+            var token = await AuthService.GetContextAccessTokenAsync();
+            var url = Config["ResourceApi:EndpointAddResource"] + "/" + ResourceId;
+
+            var requestBody = new UpdateCollectionProfileRequest
+            {
+                Id = ResourceId,
+                CollectionProfileIds = new List<string> { _selectedProfileId }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
+            request.Content = JsonContent.Create(requestBody);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Profilo di raccolta aggiornato", Severity.Success);
+                await OnProfilesUpdated.InvokeAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Errore API: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private IEnumerable<ObservableConfigurationDetailed> GetConfigList(CollectionProfileDetailed profile)
+    {
+        if (profile?.ObservableConfigurationIds == null) yield break;
+
+        foreach (var configSummary in profile.ObservableConfigurationIds)
+        {
+            if (ConfigDetails != null && ConfigDetails.TryGetValue(configSummary, out var detailedConfig))
+            {
+                if (actualNamespace != null)
+                {
+                    if (actualNamespace.observableConfigurationIds.Contains(configSummary))
+                    {
+                        yield return detailedConfig;
+                    }
+                }
+                else
+                {
+                    yield return detailedConfig;
+                }
+            }
+        }
+    }
+}

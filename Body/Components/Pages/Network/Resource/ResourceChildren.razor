@@ -1,0 +1,110 @@
+﻿@using GlassBoard.Response
+@using SharedLibrary.Models
+@using MudBlazor
+
+@if (_internalChildren == null)
+{
+    <div class="d-flex justify-center pa-4">
+        <MudProgressCircular Color="Color.Info" Indeterminate="true" Size="Size.Small" />
+    </div>
+}
+else
+{
+    <MudTable Items="FilteredChildren" T="ResourceItem" Dense="true" Hover="true" Elevation="1" Height="350px" FixedHeader="true">
+        <ToolBarContent>
+            <MudText Typo="Typo.subtitle1"><b>Risorse Figlie (@FilteredChildren.Count())</b></MudText>
+            <MudSpacer />
+
+            @* Filtro Monitoraggio *@
+            <MudSelect T="bool?" Label="Filtra Monitoraggio" Value="_isMonitoredFilter"
+                       ValueChanged="OnFilterChanged" Dense="true" Margin="Margin.Dense"
+                       Style="max-width: 200px;" Variant="Variant.Outlined">
+                <MudSelectItem T="bool?" Value="null">Tutte le risorse</MudSelectItem>
+                <MudSelectItem T="bool?" Value="true">Solo Monitorate</MudSelectItem>
+                <MudSelectItem T="bool?" Value="false">Solo Non Monitorate</MudSelectItem>
+            </MudSelect>
+        </ToolBarContent>
+
+        <HeaderContent>
+            <MudTh>Tipo</MudTh>
+            <MudTh>Nome</MudTh>
+            <MudTh Style="width: 50px"></MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="childContext">
+            <MudTd DataLabel="Tipo">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                    @GetResourceTypeName(childContext)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Nome">
+                <div class="d-flex align-center">
+                    @{
+                        bool isObserved = childContext.IsMonitored;
+                        string statusColor = isObserved ? "var(--mud-palette-success)" : "#9E9E9E";
+                        string statusTooltip = isObserved ? "Monitorato" : "Non Monitorato";
+                    }
+
+                    <MudTooltip Text="@statusTooltip">
+                        <div style="@($"width: 10px; height: 10px; border-radius: 50%; background-color: {statusColor};")"
+                             class="mr-3 flex-shrink-0">
+                        </div>
+                    </MudTooltip>
+
+                    <MudLink href="@($"/network/resource/{childContext.Id}")" Underline="Underline.Hover">
+                        <b>@childContext.Name</b>
+                    </MudLink>
+                </div>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                               Href="@($"/network/resource/{childContext.Id}")" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (!FilteredChildren.Any())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+            Nessuna risorsa corrisponde ai criteri di ricerca.
+        </MudAlert>
+    }
+}
+
+@code {
+    private List<ResourceItem> _internalChildren;
+    private string _lastRootId;
+
+    // Stato del filtro: null = Tutti, true = Monitorati, false = Non Monitorati
+    private bool? _isMonitoredFilter = null;
+
+    [Parameter] public List<ResourceItem> Children { get; set; }
+    [Parameter] public string RootId { get; set; }
+
+    // Proprietà calcolata che restituisce la lista filtrata
+    private IEnumerable<ResourceItem> FilteredChildren => _isMonitoredFilter == null
+        ? _internalChildren
+        : _internalChildren.Where(x => x.IsMonitored == _isMonitoredFilter.Value);
+
+    protected override void OnParametersSet()
+    {
+        if (RootId != _lastRootId || !ReferenceEquals(_internalChildren, Children))
+        {
+            _internalChildren = Children ?? new List<ResourceItem>();
+            _lastRootId = RootId;
+        }
+    }
+
+    private void OnFilterChanged(bool? newValue)
+    {
+        _isMonitoredFilter = newValue;
+    }
+
+    private string GetResourceTypeName(ResourceItem item)
+    {
+        if (item.ResourceTypes == null || !item.ResourceTypes.Any())
+            return "N/A";
+
+        return item.ResourceTypes.First();
+    }
+}

@@ -1,0 +1,217 @@
+﻿@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Request.Add
+@using GlassBoard.Response.Get
+@using SharedLibrary.Models
+@using MudBlazor
+@using static SharedLibrary.Enum.Enums
+@inject ISnackbar Snackbar
+@inject IObservableProvider ObservableProvider
+
+<MudText Typo="Typo.h6">@(ExistingProfile == null ? "Nuovo Profilo" : "Modifica Profilo")</MudText>
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="_profile.Name" Label="Nome Profilo" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_profile.IsDefault" Label="Profilo Predefinito" Color="Color.Primary" />
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid Class="mt-2">
+            <MudItem xs="6">
+                <MudSelect T="ResourceTypes" Label="Tipo Risorsa" @bind-Value="_profile.ResourceTypes" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var type in Enum.GetValues<ResourceTypes>())
+                    {
+                        <MudSelectItem Value="@type">@type.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect T="string" Label="Politica di Pianificazione" @bind-Value="_profile.SchedulingPolicyId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var policy in _allPolicies)
+                    {
+                        <MudSelectItem Value="@policy.Id">@policy.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        @* --- GESTIONE TAGS --- *@
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Tag Associati</MudText>
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudTextField @bind-Value="_newTag" Label="Aggiungi Tag" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          OnKeyDown="@(e => { if (e.Key == "Enter") AddTag(); })" />
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="AddTag" />
+        </div>
+        <MudChipSet T="string" AllClosable="true" OnClose="RemoveTag" Class="mb-4">
+            @foreach (var tag in _tags)
+            {
+                <MudChip Value="@tag" Text="@tag" Color="Color.Secondary" Variant="Variant.Text" />
+            }
+        </MudChipSet>
+
+        @* --- TABELLA DI SELEZIONE OC --- *@
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Seleziona Configurazioni (OC)</MudText>
+        <MudTable Items="@_allConfigs"
+                  MultiSelection="true"
+                  @bind-SelectedItems="_selectedOcObjects"
+                  Hover="true"
+                  Dense="true"
+                  FixedHeader="true"
+                  Height="250px"
+                  Filter="new Func<ObservableConfigurationDetailed,bool>(FilterFunc)"
+                  T="ObservableConfigurationDetailed"
+                  Class="mud-width-full border-solid border mud-border-primary">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_searchString"
+                              Placeholder="Cerca per nome o instrument..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0"
+                              Clearable="true" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Nome</MudTh>
+                <MudTh>Instrument</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nome">@context.Name</MudTd>
+                <MudTd DataLabel="Instrument">@context.Instrument</MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 50 }" RowsPerPageString="Righe:" />
+            </PagerContent>
+        </MudTable>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+            Elementi selezionati: @_selectedOcObjects.Count
+        </MudAlert>
+
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="Submit"
+                   Disabled="@(string.IsNullOrWhiteSpace(_profile.Name) || !_selectedOcObjects.Any())">
+            @(ExistingProfile == null ? "Salva Profilo" : "Aggiorna Profilo")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    // Parametro in ingresso per la modifica
+    [Parameter] public CollectionProfileDetailed? ExistingProfile { get; set; }
+
+    private CollectionProfileDetailed _profile = new();
+    private List<ObservableConfigurationDetailed> _allConfigs = new();
+    private List<SchedulingPolicy> _allPolicies = new();
+    private List<string> _tags = new();
+    private string _newTag = "";
+    private HashSet<ObservableConfigurationDetailed> _selectedOcObjects = new();
+    private string _searchString = "";
+
+    protected override void OnInitialized()
+    {
+        _allPolicies = ObservableProvider.GetSchedulingPolicies();
+        var configsDict = ObservableProvider.GetConfigs(null);
+
+        if (configsDict != null)
+        {
+            _allConfigs = configsDict.Values.ToList();
+        }
+
+        // LOGICA DI MODIFICA
+        if (ExistingProfile != null)
+        {
+            // Cloniamo o copiamo i dati per non modificare l'originale prima del Submit
+            _profile = new CollectionProfileDetailed
+            {
+                Id = ExistingProfile.Id,
+                Name = ExistingProfile.Name,
+                IsDefault = ExistingProfile.IsDefault,
+                SchedulingPolicyId = ExistingProfile.SchedulingPolicyId,
+                ResourceTypes = ExistingProfile.ResourceTypes
+            };
+
+            _tags = ExistingProfile.Tags?.ToList() ?? new List<string>();
+
+            // Pre-selezioniamo le configurazioni nella tabella
+            if (ExistingProfile.ObservableConfigurationIds != null)
+            {
+                _selectedOcObjects = _allConfigs
+                    .Where(c => ExistingProfile.ObservableConfigurationIds.Contains(c.Id))
+                    .ToHashSet();
+            }
+        }
+    }
+
+    private void AddTag()
+    {
+        if (!string.IsNullOrWhiteSpace(_newTag) && !_tags.Contains(_newTag))
+        {
+            _tags.Add(_newTag.Trim());
+            _newTag = "";
+        }
+    }
+
+    private void RemoveTag(MudChip<string> chip)
+    {
+        _tags.Remove(chip.Value);
+    }
+
+    private bool FilterFunc(ObservableConfigurationDetailed element)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (element.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (element.Instrument?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private async Task Submit()
+    {
+        var requestDto = new AddProfileRequest
+        {
+            Name = _profile.Name,
+            IsDefault = _profile.IsDefault,
+            SchedulingPolicyId = _profile.SchedulingPolicyId,
+            ObservableConfigurationIds = _selectedOcObjects.Select(x => x.Id).ToList(),
+            ResourceTypes = _profile.ResourceTypes.ToString(),
+            Tags = _tags,
+            Id = ExistingProfile?.Id
+        };
+
+        string? result;
+
+        if (ExistingProfile == null)
+        {
+            // CREAZIONE
+            result = await ObservableProvider.CreateProfileAsync(requestDto);
+        }
+        else
+        {
+            // MODIFICA
+            // Assicurati che l'ID sia una stringa, altrimenti usa .ToString()
+            result = await ObservableProvider.UpdateProfileAsync(ExistingProfile.Id.ToString(), requestDto);
+        }
+
+        if (result == "SUCCESS")
+        {
+            // Chiudiamo il dialog con successo.
+            // Se ti serve passare l'ID creato/modificato, passa 'result' invece di true.
+            Snackbar.Add("Configurazione completata con successo!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            // Opzionale: mostra un avviso di errore all'utente
+            //Console.WriteLine("Errore durante il salvataggio del profilo.");
+            Snackbar.Add("Errore durante il salvataggio del profilo.", Severity.Error);
+        }
+    }
+}

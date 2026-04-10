@@ -1,0 +1,129 @@
+﻿@inherits LayoutComponentBase
+@using GlassBoard.Services
+@using MudBlazor
+@inject AppContextService ContextService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<MudThemeProvider IsDarkMode="false" />
+<MudPopoverProvider />
+<MudSnackbarProvider />
+<MudDialogProvider FullWidth="true" MaxWidth="MaxWidth.Medium" CloseButton="true" />
+
+<MudLayout>
+    @if (!ContextService.IsInitialized)
+    {
+        <div class="d-flex align-center justify-center" style="height: 100vh; width: 100vw; position: fixed; z-index: 9999; background-color: white;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    else
+    {
+        <CascadingValue Value="this" Name="LayoutContainer">
+            <MudAppBar Elevation="1" Fixed="true">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" OnClick="@((e) => DrawerToggle())" />
+
+                <MudText Typo="Typo.h5" Class="ml-3">@_currentTitle</MudText>
+
+                <MudSpacer />
+
+                <div class="d-flex align-center mr-6">
+                    @if (_canChangeEnvironment)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Inherit" Class="mr-2" Size="Size.Small" />
+                        <MudSelect T="string"
+                                   Value="@ContextService.CurrentEnvironmentName"
+                                   ValueChanged="OnEnvironmentChanged"
+                                   Variant="Variant.Text"
+                                   Dense="true"
+                                   Class="env-select-appbar">
+                            @foreach (var env in ContextService.GetAvailableEnvironments())
+                            {
+                                <MudSelectItem Value="@env">@env</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        @* Visualizzazione statica quando siamo in una pagina di dettaglio *@
+                        <MudChip T="string" Icon="@Icons.Material.Filled.Lock" Color="Color.Inherit" Variant="Variant.Text" Class="white-text-chip">
+                            Tenant: @ContextService.CurrentEnvironmentName
+                        </MudChip>
+                    }
+                </div>
+
+                <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
+            </MudAppBar>
+
+            <MudDrawer @bind-Open="_drawerOpen" Elevation="2">
+                <NavMenu />
+            </MudDrawer>
+
+            <MudMainContent>
+                <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8 pt-2">
+                    @Body
+                </MudContainer>
+            </MudMainContent>
+        </CascadingValue>
+    }
+</MudLayout>
+
+<style>
+    .env-select-appbar {
+        width: 160px;
+        color: white !important;
+    }
+
+        .env-select-appbar .mud-input-slot {
+            color: white !important;
+        }
+
+    .white-text-chip {
+        color: white !important;
+        opacity: 0.8;
+    }
+</style>
+
+@code {
+    bool _drawerOpen = true;
+    private string _currentTitle = "BB";
+    private bool _canChangeEnvironment = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Sottoscrizione all'evento di cambio URL [cite: 10-02-2026]
+        Nav.LocationChanged += HandleLocationChanged;
+
+        await ContextService.InitializeAsync();
+        UpdateEnvironmentSelectionState();
+        StateHasChanged();
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateEnvironmentSelectionState();
+        StateHasChanged();
+    }
+
+    private void UpdateEnvironmentSelectionState()
+    {
+        // Il selettore è attivo solo se siamo nella root o nella pagina specifica ResourcesList [cite: 10-02-2026]
+        var relativeUri = Nav.ToBaseRelativePath(Nav.Uri);
+        _canChangeEnvironment = string.IsNullOrEmpty(relativeUri) || relativeUri.Equals("network/resources", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnEnvironmentChanged(string newEnv)
+    {
+        ContextService.SetTenant(newEnv);
+        Nav.NavigateTo(Nav.Uri, forceLoad: true); 
+    }
+
+    public void SetPageTitle(string title) { _currentTitle = title; StateHasChanged(); }
+    void DrawerToggle() => _drawerOpen = !_drawerOpen;
+
+    public void Dispose()
+    {
+        // Rimuoviamo il gestore per evitare memory leak [cite: 10-02-2026]
+        Nav.LocationChanged -= HandleLocationChanged;
+    }
+}
