@@ -33,7 +33,7 @@
                 }
             </MudButton>
         }
-        <MudButton Variant="Variant.Filled" Color="@(IsObserved? Color.Error: Color.Success)" Size="Size.Small" OnClick="OnToggleMonitoring" Disabled="IsProcessing">
+        <MudButton id="btn-toggle-monitor" Variant="Variant.Filled" Color="@(IsObserved? Color.Error: Color.Success)" Size="Size.Small" OnClick="OnToggleMonitoring" Disabled="IsProcessing">
             <MudText Size="Size.Small">@(IsObserved ? "Disabilita" : "Abilita")</MudText>
         </MudButton>
         <div class="d-flex flex-column">

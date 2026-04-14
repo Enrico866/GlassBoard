@@ -21,5 +21,8 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
 
+    - name: NuGet Audit
+      run: dotnet list package --vulnerable # Controlla pacchetti con falle di sicurezza
+      
     - name: Build
       run: dotnet build --no-restore --configuration Release
