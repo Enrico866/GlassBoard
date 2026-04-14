@@ -1,0 +1,39 @@
+﻿@page "/network/security/list"
+@using GlassBoard.Components // Assicurati che il percorso sia corretto
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <MudText Typo="Typo.h4">Configurazioni di Sicurezza</MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenAddDialog">
+            Nuova Configurazione
+        </MudButton>
+    </MudStack>
+
+    <MudPaper Elevation="2" Class="pa-4">
+        @* Per ora vuota come richiesto *@
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            Non ci sono ancora configurazioni salvate. Clicca su "Nuova Configurazione" per iniziare.
+        </MudAlert>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private async Task OpenAddDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<SecurityDialog>("Nuova Security", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            // Qui in futuro rinfrescherai la lista
+            StateHasChanged();
+        }
+    }
+}

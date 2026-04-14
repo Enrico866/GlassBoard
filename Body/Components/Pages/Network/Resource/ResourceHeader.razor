@@ -14,6 +14,7 @@
 @inject IDialogService DialogService
 @inject IAuthService AuthService
 @inject IConfiguration Config
+@inject IResourceProvider ResourceProvider
 @inject HttpClient Http
 @inject ICheckPolicyProvider PolicyProvider
 
@@ -122,6 +123,22 @@
     private async Task ExecuteDiscoveryRequests(List<InstrumentTypes> selected)
     {
         _isProcessingDiscovery = true;
+
+        try
+        {
+            // Una sola riga per gestire tutto il processo
+            await ResourceProvider.RunMultipleDiscoveriesAsync(Data.Id, selected, Data.OrganizationId);
+        }
+        finally
+        {
+            _isProcessingDiscovery = false;
+            StateHasChanged();
+        }
+    }
+
+    /*private async Task ExecuteDiscoveryRequests(List<InstrumentTypes> selected)
+    {
+        _isProcessingDiscovery = true;
         try
         {
             var token = await AuthService.GetContextAccessTokenAsync();
@@ -160,9 +177,9 @@
             _isProcessingDiscovery = false;
             StateHasChanged();
         }
-    }
+    }*/
 
-    private async Task ToggleMonitoring()
+    /*private async Task ToggleMonitoring()
     {
         _isProcessing = true;
         try
@@ -188,6 +205,14 @@
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
         finally { _isProcessing = false; }
+    }*/
+
+    private async Task ToggleMonitoring()
+    {
+        _isProcessing = true;
+        // La logica è tutta incapsulata nel provider
+        await ResourceProvider.ToggleMonitoringAsync(Data, OnResourceUpdated);
+        _isProcessing = false;
     }
 
     private async Task OpenCheckPolicies()

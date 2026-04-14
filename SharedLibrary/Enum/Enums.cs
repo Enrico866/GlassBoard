@@ -159,7 +159,12 @@ namespace SharedLibrary.Enum
             Ospf = 38,
             UpsSensor = 39,
             Psu = 40,
-            VoltageSensor = 41
+            VoltageSensor = 41,
+            VirtualMemory = 42,
+            Volume = 43,
+            Lun = 44,
+            Aggregate = 45,
+            BgpPeer = 46,
         }
 
     }
@@ -260,7 +265,7 @@ namespace SharedLibrary.Enum
         Celsius,
         [Description("V")]
         Volt,
-        [Description("/min")]
+        [Description("{rounds}/min")]
         RevolutionsPerMinute,
         [Description("1")]
         Generic

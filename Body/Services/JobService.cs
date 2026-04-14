@@ -21,27 +21,23 @@ public class JobService : IJobService
 
     public async Task<(bool Success, List<JobItem> Jobs)> GenerateAndNotifyAsync(string probeId, string tenantId, string orgId, string dbName)
     {
-        try
-        {
-            var token = await _auth.GetAccessTokenByParamAsync(_options.AdminUser, _options.AdminPassword);
-            var jobs = new List<JobItem>();
+        var token = await _auth.GetAccessTokenByParamAsync(_options.AdminUser, _options.AdminPassword);
+        var jobs = new List<JobItem>();
 
-            // 1. Generate and Persist
-            using var genRequest = CreateRequest(HttpMethod.Post, _options.JobGenerateAndPersist, token, tenantId, orgId, dbName, probeId);
-            var genResponse = await _http.SendAsync(genRequest);
-            
-            if (!genResponse.IsSuccessStatusCode) return (false, jobs);
+        // 1. Generate and Persist
+        using var genRequest = CreateRequest(HttpMethod.Post, _options.JobGenerateAndPersist, token, tenantId, orgId, dbName, probeId);
+        var genResponse = await _http.SendAsync(genRequest);
+        
+        if (!genResponse.IsSuccessStatusCode) return (false, jobs);
 
-            var result = await genResponse.Content.ReadFromJsonAsync<GetJobPersistResponse>();
-            jobs = result?.Items ?? new List<JobItem>();
+        var result = await genResponse.Content.ReadFromJsonAsync<GetJobPersistResponse>();
+        jobs = result?.Items ?? new List<JobItem>();
 
-            // 2. Notify Refresh
-            using var notifyRequest = CreateRequest(HttpMethod.Post, _options.JobNotifyRefresh, token, tenantId, orgId, dbName, probeId);
-            var notifyResponse = await _http.SendAsync(notifyRequest);
+        // 2. Notify Refresh
+        using var notifyRequest = CreateRequest(HttpMethod.Post, _options.JobNotifyRefresh, token, tenantId, orgId, dbName, probeId);
+        var notifyResponse = await _http.SendAsync(notifyRequest);
 
-            return (notifyResponse.IsSuccessStatusCode, jobs);
-        }
-        catch { return (false, new List<JobItem>()); }
+        return (notifyResponse.IsSuccessStatusCode, jobs);
     }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, string url, string token, string tenantId, string orgId, string dbName, string probeId)

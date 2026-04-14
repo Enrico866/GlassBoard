@@ -7,23 +7,28 @@ using GlassBoard.Services;
 
 using MudBlazor.Services;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddMudServices();
+builder.Services.AddScoped<HttpInterceptorHandler>();
+
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("", client => 
+{
+})
+.AddHttpMessageHandler<HttpInterceptorHandler>();
+
 builder.Services.AddServerSideBlazor(options =>
 {
     // CircuitOptions per Blazor (dove va DetailedErrors)
     options.DetailedErrors = true; 
 });
-
-builder.Services.AddMudServices();
-
 
 builder.Services.Configure<ResourceApiOptions>(builder.Configuration.GetSection("ResourceApi"));
 builder.Services.Configure<SchedulingApiOptions>(builder.Configuration.GetSection("ResourceApi"));

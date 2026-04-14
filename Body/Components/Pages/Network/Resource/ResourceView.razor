@@ -348,6 +348,8 @@ else
         _namespace ??= string.Empty;
 
         await ObsProvider.InitializeAsync();
+        await TenantProvider.InitializeAsync();
+        await ProbeProvider.InitializeAsync();
 
         // 2. Le assegnazioni dei nomi sono SINCRONE e immediate
         // Leggiamo direttamente dai provider che sono già pronti in memoria

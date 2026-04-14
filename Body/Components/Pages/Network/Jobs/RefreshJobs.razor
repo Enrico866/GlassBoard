@@ -3,7 +3,7 @@
 @using GlassBoard.Abstractions.Service
 @using GlassBoard.Response.Get
 @using static GlassBoard.Response.Get.GetTenantHttpResponse
-@inject ICollectorProvider CollectorProvider
+@inject IProbeProvider ProbeProvider
 @inject ITenantProvider TenantProvider
 @inject IJobService JobService
 @inject ISnackbar Snackbar
@@ -35,7 +35,7 @@
 
             <MudSelect T="string" Label="Probe" @bind-Value="SelectedProbeId" Variant="Variant.Outlined"
                        Margin="Margin.Dense" Dense="true" Style="width: 250px; background-color: white;">
-                @foreach (var probe in CollectorProvider.GetCollectors())
+                @foreach (var probe in ProbeProvider.GetAllProbes())
                 {
                     <MudSelectItem Value="@probe.Id">@probe.Description</MudSelectItem>
                 }
@@ -114,7 +114,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(CollectorProvider.InitializeAsync(), TenantProvider.InitializeAsync());
+        await Task.WhenAll(ProbeProvider.InitializeAsync(), TenantProvider.InitializeAsync());
     }
 
     private void OnTenantChanged(string newValue)

@@ -1,0 +1,135 @@
+﻿@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Abstractions.Service
+@using GlassBoard.Request.Add
+@using SharedLibrary.Enum
+@inject ISecurityService SecurityService
+@inject ISecurityProvider SecurityProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3 mb-n1" />
+            Nuova Configurazione Security
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <EditForm Model="@_model" OnValidSubmit="HandleSubmit">
+            <DataAnnotationsValidator />
+            <MudGrid>
+                @* Info Base *@
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.Name" Label="Nome Identificativo" Variant="Variant.Outlined" Required="true" Margin="Margin.Dense" />
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudSelect T="SecretScopeTypes" Label="Secret Scope" @bind-Value="_model.SecretScope" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (SecretScopeTypes item in Enum.GetValues(typeof(SecretScopeTypes)))
+                        {
+                            <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudSelect T="SecurityTypes" Label="Tipo Security" Value="_model.SecurityType" ValueChanged="OnSecurityTypeChanged" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (SecurityTypes item in Enum.GetValues(typeof(SecurityTypes)))
+                        {
+                            <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                </MudItem>
+
+                @* Logica campi dinamici *@
+                @if (_model.SecurityType == SecurityTypes.Credential || _model.SecurityType == SecurityTypes.ApiAuth)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.Secret.Username" Label="Username" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.Secret.Password" Label="Password" InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                }
+
+                @if (_model.SecurityType == SecurityTypes.SnmpCommunityAuth)
+                {
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Secret.Community" Label="SNMP Community" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                }
+
+                @if (_model.SecurityType == SecurityTypes.SnmpUsmAuth)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.Secret.Username" Label="Security Name" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="SecurityLevelTypes?" Label="Security Level" @bind-Value="_model.Secret.SecurityLevel" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (SecurityLevelTypes item in Enum.GetValues(typeof(SecurityLevelTypes)))
+                            {
+                                <MudSelectItem T="SecurityLevelTypes?" Value="@((SecurityLevelTypes?)item)">@item.ToString()</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    @if (_model.Secret.SecurityLevel != SecurityLevelTypes.NoAuthNoPriv)
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudSelect T="SnmpV3AuthProtocolTypes?" Label="Auth Protocol" @bind-Value="_model.Secret.AuthProtocol" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                <MudSelectItem T="SnmpV3AuthProtocolTypes?" Value="@((SnmpV3AuthProtocolTypes?)SnmpV3AuthProtocolTypes.Md5)">MD5</MudSelectItem>
+                                <MudSelectItem T="SnmpV3AuthProtocolTypes?" Value="@((SnmpV3AuthProtocolTypes?)SnmpV3AuthProtocolTypes.Sha)">SHA</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="8">
+                            <MudTextField @bind-Value="_model.Secret.AuthPassword" Label="Auth Password" InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    }
+                }
+            </MudGrid>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleSubmit" Disabled="_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salva Configurazione
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private AddSecurityRequest _model = new() { Secret = new() };
+    private bool _loading = false;
+
+    private void OnSecurityTypeChanged(SecurityTypes newType)
+    {
+        _model.SecurityType = newType;
+        _model.Secret = new SecretData();
+        if (newType == SecurityTypes.SnmpUsmAuth) _model.Secret.SecurityLevel = SecurityLevelTypes.NoAuthNoPriv;
+        StateHasChanged();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task HandleSubmit()
+    {
+        _loading = true;
+        var success = await SecurityService.CreateSecurityConfigAsync(_model);
+        if (success)
+        {
+            await SecurityProvider.InitializeAsync(forceRefresh: true);
+            Snackbar.Add("Configurazione salvata", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        _loading = false;
+    }
+}

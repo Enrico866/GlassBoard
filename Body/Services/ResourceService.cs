@@ -28,6 +28,41 @@ namespace GlassBoard.Services
             _options = options.Value;
         }
 
+        public async Task<bool> RunDiscoveryAsync(string resourceId, string instrumentType, bool isPreDiscovery, string? organizationId)
+        {
+            var token = await _authService.GetContextAccessTokenAsync();
+        
+            var requestBody = new
+            {
+                ResourceId = resourceId,
+                IsPreDiscovery = isPreDiscovery,
+                InstrumentType = instrumentType,
+                OrganizationId = organizationId
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, _options.DiscoveryUrl);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+            request.Content = JsonContent.Create(requestBody);
+
+            var response = await _http.SendAsync(request);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> UpdateMonitoringStatusAsync(string resourceId, bool isObserved)
+        {
+            var token = await _authService.GetContextAccessTokenAsync();
+            var url = $"{_options.EndpointAddResource.TrimEnd('/')}/{resourceId}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+            request.Content = JsonContent.Create(new { isObserved });
+
+            var response = await _http.SendAsync(request);
+            return response.IsSuccessStatusCode;
+        }
+
         private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string url)
         {
             var token = await _authService.GetContextAccessTokenAsync();
