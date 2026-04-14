@@ -24,7 +24,13 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-6" />
     }
 
-    <MudDataGrid Items="@_profiles" T="CollectionProfileDetailed" Hover="true" Bordered="false" Striped="true" Class="mt-4 shadow-sm">
+    <MudDataGrid Items="@_profiles"
+                 T="CollectionProfileDetailed"
+                 @bind-RowsPerPage="_rowsPerPage"
+             Hover="true"
+             Bordered="false"
+             Striped="true"
+             Class="mt-4 shadow-sm">
         <Columns>
             <PropertyColumn Property="x => x.Name" Title="Nome Profilo" Filterable="true" />
 
@@ -97,7 +103,10 @@
             </TemplateColumn>
         </Columns>
         <PagerContent>
-            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" RowsPerPageString="Righe per pagina:" />
+            <MudDataGridPager T="CollectionProfileDetailed" 
+                PageSizeOptions="new int[] { 10, 25, 50 }" 
+                RowsPerPageString="Righe per pagina:"
+                InfoFormat="{first_item}-{last_item} di {all_items}" />
         </PagerContent>
     </MudDataGrid>
 </MudContainer>
@@ -106,6 +115,13 @@
     private List<CollectionProfileDetailed> _profiles = new();
     private bool _loading = false;
 
+    private int _rowsPerPage = 25;
+
+    private void OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        StateHasChanged(); // Forza Blazor a ridisegnare la griglia con il nuovo limite
+    }
     // Metodo CORRETTO per gestire l'inizializzazione asincrona
     protected override async Task OnInitializedAsync()
     {
