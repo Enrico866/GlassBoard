@@ -1,10 +1,13 @@
 ﻿using GlassBoard.Abstractions.Config;
 using GlassBoard.Abstractions.Service;
+using GlassBoard.Request.Add;
 using GlassBoard.Response.Get;
 
 using Microsoft.Extensions.Options;
 
 using System.Net.Http.Headers;
+
+using static System.Net.WebRequestMethods;
 
 public class NamespaceService : INamespaceService
 {
@@ -37,5 +40,20 @@ public class NamespaceService : INamespaceService
             return result?.Items ?? new List<NamespaceModel>();
         }
         return new List<NamespaceModel>();
+    }
+
+    public async Task<HttpResponseMessage?> AddNamespace(AddNamespaceHttpRequest request)
+    {
+        var url = _options.NamespacesUrl.ToString().Replace("s/","");
+        //var token = await AuthService.GetAccessTokenByParamAsync(Config["Tenant:Admin:User"], Config["Tenant:Admin:Password"]);
+        var token = await _auth.GetContextAccessTokenAsync();
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        httpRequest.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+        httpRequest.Headers.Add("X-MYDEV-APPNAME", "GlassBoard");
+        httpRequest.Content = JsonContent.Create(request);
+
+        return await _http.SendAsync(httpRequest);
     }
 }

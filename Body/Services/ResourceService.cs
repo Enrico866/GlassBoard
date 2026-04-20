@@ -1,14 +1,23 @@
 ﻿using GlassBoard.Abstractions.Config;
 using GlassBoard.Abstractions.Service;
 using GlassBoard.Mappers;
+using GlassBoard.Request.Add;
+using GlassBoard.Request.Update;
 using GlassBoard.Response.Get;
 
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Options;
+
+using MudBlazor;
 
 using SharedLibrary.Models;
 
+using System;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+
+using static System.Net.WebRequestMethods;
 
 namespace GlassBoard.Services
 {
@@ -112,6 +121,44 @@ namespace GlassBoard.Services
                 return result?.Items ?? new List<ResourceApiDto>();
             }
             return new List<ResourceApiDto>();
+        }
+
+        public async Task<HttpResponseMessage?> AddResource(AddResourceHttpRequest request)
+        {
+            var token = await _authService.GetContextAccessTokenAsync();
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _options.EndpointAddResource);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            httpRequest.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+            httpRequest.Content = JsonContent.Create(request);
+
+            return await _http.SendAsync(httpRequest);
+        }
+
+        public async Task<HttpResponseMessage?> UpdateResourceAttributes(UpdateResourceAttributesRequest request)
+        {
+            var token = await _authService.GetContextAccessTokenAsync();
+            var url = _options.EndpointAddResource + "/" + request.Id; // Endpoint PUT unico
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Put, url);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            httpRequest.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+            httpRequest.Content = JsonContent.Create(request);
+
+            return await _http.SendAsync(httpRequest);
+        }
+
+        public async Task<HttpResponseMessage?> UpdateCollectionProfileAsync(UpdateCollectionProfileRequest request)
+        {
+            var token = await _authService.GetContextAccessTokenAsync();
+            var url = _options.EndpointAddResource + "/" + request.Id;
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Put, url);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            httpRequest.Headers.Add("X-MYDEV-CHANNEL", _options.Channel);
+            httpRequest.Content = JsonContent.Create(request);
+
+            return await _http.SendAsync(httpRequest);
         }
     }
 }

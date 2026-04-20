@@ -14,6 +14,7 @@
 @using static SharedLibrary.Enum.Enums 
 @inject IResourceService InterfaceService
 @inject IResourceProvider ResourceProvider
+@inject IResourceService ResourceService
 @inject ITenantProvider TenantProvider
 @inject IProbeProvider ProbeProvider
 @inject IObservableProvider ObsProvider
@@ -385,23 +386,15 @@ else
         _isUpdating = true;
         try
         {
-            var token = await AuthService.GetContextAccessTokenAsync();
-            var url = Config["ResourceApi:EndpointAddResource"] + "/" + _resource.Id;
-
             var requestBody = new UpdateCollectionProfileRequest
             {
                 Id = _resource.Id,
                 CollectionProfileIds = new List<string> { _selectedProfileId }
             };
 
-            using var request = new HttpRequestMessage(HttpMethod.Put, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
-            request.Content = JsonContent.Create(requestBody);
+            var response = await ResourceService.UpdateCollectionProfileAsync(requestBody);
 
-            var response = await Http.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
+            if (response != null && response.IsSuccessStatusCode)
             {
                 Snackbar.Add("Profilo di raccolta aggiornato", Severity.Success);
                 await FullReload();

@@ -14,6 +14,7 @@
 @inject HttpClient Http
 @inject IObservableProvider ObsProvider
 @inject INamespaceProvider NamespaceProvider
+@inject IResourceService ResourceService
 
 @if (Profiles == null)
 {
@@ -287,21 +288,13 @@ else
         _isSaving = true;
         try
         {
-            var token = await AuthService.GetContextAccessTokenAsync();
-            var url = Config["ResourceApi:EndpointAddResource"] + "/" + ResourceId;
-
             var requestBody = new UpdateCollectionProfileRequest
             {
                 Id = ResourceId,
                 CollectionProfileIds = new List<string> { _selectedProfileId }
             };
 
-            using var request = new HttpRequestMessage(HttpMethod.Put, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
-            request.Content = JsonContent.Create(requestBody);
-
-            var response = await Http.SendAsync(request);
+            var response = await ResourceService.UpdateCollectionProfileAsync(requestBody);
 
             if (response.IsSuccessStatusCode)
             {

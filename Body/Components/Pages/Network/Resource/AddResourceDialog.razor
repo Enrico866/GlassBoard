@@ -283,13 +283,9 @@
 
             _model.Description = string.IsNullOrWhiteSpace(_model.Description) ? _model.Name : _model.Description;
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, Config["ResourceApi:EndpointAddResource"]);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
-            request.Content = JsonContent.Create(_model);
+            var res = await ResourceService.AddResource(_model);
 
-            var res = await Http.SendAsync(request);
-            if (res.IsSuccessStatusCode)
+            if (res != null && res.IsSuccessStatusCode)
             {
                 Snackbar.Add("Risorsa creata con successo", Severity.Success);
                 MudDialog.Close(DialogResult.Ok(true));

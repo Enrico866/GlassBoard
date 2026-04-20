@@ -100,8 +100,6 @@
         _isSaving = true;
         try
         {
-            var token = await AuthService.GetContextAccessTokenAsync();
-            var url = Config["ResourceApi:EndpointAddResource"] + "/" + ResourceId; // Endpoint PUT unico
 
             var requestBody = new UpdateResourceAttributesRequest
             {
@@ -109,14 +107,9 @@
                 ResourceAttributes = Attributes
             };
 
-            using var request = new HttpRequestMessage(HttpMethod.Put, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
-            request.Content = JsonContent.Create(requestBody);
+            var response = await ResourceService.UpdateResourceAttributes(requestBody);
 
-            var response = await Http.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
+            if (response != null && response.IsSuccessStatusCode)
             {
                 Snackbar.Add("Attributi aggiornati con successo", Severity.Success);
                 await OnChanged.InvokeAsync();

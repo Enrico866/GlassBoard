@@ -10,6 +10,7 @@
 @inject IAuthService AuthService
 @inject IObservableProvider ObservableProvider
 @inject INamespaceProvider NamespaceProvider
+@inject INamespaceService NamespaceService
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
     <MudPaper Class="pa-6">
@@ -209,19 +210,9 @@
                 ObservableConfigurationIds = _selectedObsSet.Select(x => x.Id).ToList()
             };
 
-            var url = Config["ResourceApi:NamespacesUrl"].ToString().Replace("s/","");
-            //var token = await AuthService.GetAccessTokenByParamAsync(Config["Tenant:Admin:User"], Config["Tenant:Admin:Password"]);
-            var token = await AuthService.GetContextAccessTokenAsync();
+            var res = await NamespaceService.AddNamespace(payload);
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
-            request.Headers.Add("X-MYDEV-APPNAME", "GlassBoard");
-            request.Content = JsonContent.Create(payload);
-
-            var response = await Http.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
+            if (res != null && res.IsSuccessStatusCode)
             {
                 Snackbar.Add("Operazione completata con successo!", Severity.Success);
                 await NamespaceProvider.InitializeAsync(forceRefresh: true);
@@ -229,7 +220,7 @@
             }
             else
             {
-                var errorDetail = await response.Content.ReadAsStringAsync();
+                var errorDetail = await res.Content.ReadAsStringAsync();
                 // Log per debug in caso di errore 400
                 Console.WriteLine($"[JSON INVIATO]: {System.Text.Json.JsonSerializer.Serialize(payload)}");
                 Console.WriteLine($"[ERRORE API]: {errorDetail}");

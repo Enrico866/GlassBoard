@@ -1,4 +1,6 @@
-﻿using GlassBoard.Response.Get;
+﻿using GlassBoard.Request.Add;
+using GlassBoard.Request.Update;
+using GlassBoard.Response.Get;
 
 using SharedLibrary.Models;
 
@@ -14,5 +16,11 @@ namespace GlassBoard.Abstractions.Service
         Task<bool> RunDiscoveryAsync(string resourceId, string instrumentType, bool isPreDiscovery, string? organizationId);
 
         Task<bool> UpdateMonitoringStatusAsync(string resourceId, bool isObserved);
+
+        Task<HttpResponseMessage?> AddResource(AddResourceHttpRequest request);
+
+        Task<HttpResponseMessage?> UpdateResourceAttributes(UpdateResourceAttributesRequest request);
+
+        Task<HttpResponseMessage?> UpdateCollectionProfileAsync(UpdateCollectionProfileRequest request);
     }
 }
