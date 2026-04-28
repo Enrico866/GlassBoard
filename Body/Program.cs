@@ -81,6 +81,7 @@ builder.Services.AddScoped<IProbeProvider, ProbeProvider>();
 builder.Services.AddScoped<ICollectorProvider, CollectorProvider>();
 builder.Services.AddScoped<ISchedulingProvider, SchedulingProvider>();
 builder.Services.AddScoped<ISecurityProvider, SecurityProvider>();
+builder.Services.AddScoped<IProfileRuleProvider, ProfileRuleProvider>();
 
 builder.Services.AddScoped<AppContextService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -95,6 +96,7 @@ builder.Services.AddScoped<ICollectorService, CollectorService>();
 builder.Services.AddScoped<ICheckService, CheckService>();
 builder.Services.AddScoped<ICheckPolicyService, CheckPolicyService>();
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IProfileRuleService, ProfileRuleService>();
 
 
 var app = builder.Build();

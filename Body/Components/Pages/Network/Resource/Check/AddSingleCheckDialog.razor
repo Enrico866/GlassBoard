@@ -22,7 +22,7 @@
     <DialogContent>
         <MudContainer Style="max-height: 600px; overflow-y: auto;">
             <MudGrid Dense="true">
-                @* Info Base *@
+                @* --- INFO BASE --- *@
                 <MudItem xs="12" md="6">
                     <MudTextField @bind-Value="_model.Name" Label="Nome Check*" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
                 </MudItem>
@@ -35,44 +35,71 @@
                     </MudSelect>
                 </MudItem>
 
-                @* Configurazione Metriche (DataSampleQuery) *@
-                <MudItem xs="12">
+                @* --- LOCALIZZAZIONE MESSAGGI (NOVITÀ) --- *@
+                <MudItem xs="12" Class="mt-4">
+                    <div class="d-flex align-center justify-space-between mb-2">
+                        <MudText Typo="Typo.subtitle2"><b>Messaggi Localizzati*</b></MudText>
+                        <MudButton StartIcon="@Icons.Material.Filled.Language" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" OnClick="AddLocalization">Aggiungi Lingua</MudButton>
+                    </div>
+                    @foreach (var langKey in _model.TemplateLocalizedMessages.Keys.ToList())
+                    {
+                        <MudPaper Outlined="true" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
+                            <MudGrid Dense="true" AlignItems="Center">
+                                <MudItem xs="12" md="3">
+                                    <MudSelect T="string" Label="Lingua" Value="langKey" ValueChanged="@(newKey => OnLanguageKeyChanged(langKey, newKey))" Margin="Margin.Dense" Variant="Variant.Outlined">
+                                        <MudSelectItem Value="@("it-IT")">Italiano (it-IT)</MudSelectItem>
+                                        <MudSelectItem Value="@("en-US")">Inglese (en-US)</MudSelectItem>
+                                        <MudSelectItem Value="@("fr-FR")">Francese (fr-FR)</MudSelectItem>
+                                        <MudSelectItem Value="@("es-ES")">Spagnolo (es-ES)</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="7">
+                                    <MudTextField T="string" Label="Messaggio (usa {name} per il nome risorsa)"
+                                                  Value="@_model.TemplateLocalizedMessages[langKey]"
+                                                  ValueChanged="@(val => _model.TemplateLocalizedMessages[langKey] = val)"
+                                                  Margin="Margin.Dense" Variant="Variant.Outlined" Required="true" />
+                                </MudItem>
+                                <MudItem xs="12" md="2" Class="d-flex justify-end">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                   Disabled="@(_model.TemplateLocalizedMessages.Count <= 1)"
+                                                   OnClick="@(() => _model.TemplateLocalizedMessages.Remove(langKey))" Size="Size.Small" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+                </MudItem>
+
+                @* --- CONFIGURAZIONE METRICHE --- *@
+                <MudItem xs="12" Class="mt-4">
                     <div class="d-flex align-center justify-space-between mt-2">
                         <MudText Typo="Typo.subtitle2">Metriche Associate (Data Sample)</MudText>
                         <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="AddMetricField" Color="Color.Info">Aggiungi Metrica</MudButton>
                     </div>
-                    @if (_model.DataSampleQuery?.MetricQueries != null)
+                    @foreach (var metric in _model.DataSampleQuery.MetricQueries)
                     {
-                        @foreach (var metric in _model.DataSampleQuery.MetricQueries)
-                        {
-                            <MudPaper Outlined="true" Class="pa-3 mt-1 mb-2" Style="background-color: var(--mud-palette-background-grey);">
-                                <MudGrid Dense="true">
-                                    <MudItem xs="12" md="5">
-                                        <MudSelect T="string"
-                                                   Value="metric.MetricName"
-                                                   ValueChanged="@(value => OnQueryMetricChanged(value, metric))"
-                                                   Label="Seleziona Metrica"
-                                                   Margin="Margin.Dense">
-                                            @foreach (var mName in AvailableMetrics)
-                                            {
-                                                <MudSelectItem Value="@mName">@mName</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                    </MudItem>
-                                    <MudItem xs="12" md="5">
-                                        <MudTextField @bind-Value="metric.ProjectedMetricName" Label="Projected Name" Margin="Margin.Dense" Placeholder="es. val_1" />
-                                    </MudItem>
-                                    <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
-                                        <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle" Color="Color.Error" OnClick="@(() => _model.DataSampleQuery.MetricQueries.Remove(metric))" Size="Size.Small" />
-                                    </MudItem>
-                                </MudGrid>
-                            </MudPaper>
-                        }
+                        <MudPaper Outlined="true" Class="pa-3 mt-1 mb-2" Style="background-color: var(--mud-palette-background-grey);">
+                            <MudGrid Dense="true">
+                                <MudItem xs="12" md="5">
+                                    <MudSelect T="string" Value="metric.MetricName" ValueChanged="@(value => OnQueryMetricChanged(value, metric))" Label="Seleziona Metrica" Margin="Margin.Dense">
+                                        @foreach (var mName in AvailableMetrics)
+                                        {
+                                            <MudSelectItem Value="@mName">@mName</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="5">
+                                    <MudTextField @bind-Value="metric.ProjectedMetricName" Label="Projected Name" Margin="Margin.Dense" Placeholder="es. val_1" />
+                                </MudItem>
+                                <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+                                    <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle" Color="Color.Error" OnClick="@(() => _model.DataSampleQuery.MetricQueries.Remove(metric))" Size="Size.Small" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
                     }
                 </MudItem>
 
-                @* Logica di Valutazione *@
-                <MudItem xs="12" md="4">
+                @* --- LOGICA DI VALUTAZIONE --- *@
+                <MudItem xs="12" md="4" Class="mt-4">
                     <MudSelect T="CheckQueryTypes?" Label="Tipo Valutazione" Value="_model.CheckQueryType" ValueChanged="OnQueryTypeChanged" Variant="Variant.Outlined" Margin="Margin.Dense">
                         @foreach (CheckQueryTypes item in Enum.GetValues(typeof(CheckQueryTypes)))
                         {
@@ -80,8 +107,7 @@
                         }
                     </MudSelect>
                 </MudItem>
-
-                <MudItem xs="12" md="4">
+                <MudItem xs="12" md="4" Class="mt-4">
                     @if (_model.CheckQueryType == CheckQueryTypes.TimeRange)
                     {
                         <MudTextField @bind-Value="_itemsTimeRangeString" Label="Time Range (hh:mm:ss)" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -91,8 +117,7 @@
                         <MudNumericField @bind-Value="_model.ItemsCount" Label="Items Count" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="@(_model.CheckQueryType == CheckQueryTypes.Single)" />
                     }
                 </MudItem>
-
-                <MudItem xs="12" md="4">
+                <MudItem xs="12" md="4" Class="mt-4">
                     <MudSelect T="CheckStatusTypes?" Label="Stato Default" @bind-Value="_model.DefaultResult" Variant="Variant.Outlined" Margin="Margin.Dense">
                         @foreach (CheckStatusTypes item in Enum.GetValues(typeof(CheckStatusTypes)))
                         {
@@ -101,45 +126,42 @@
                     </MudSelect>
                 </MudItem>
 
-                @* Regole (RuleDefinitions) *@
+                @* --- REGOLE --- *@
                 <MudItem xs="12" Class="mt-4">
                     <div class="d-flex align-center justify-space-between mb-2">
                         <MudText Typo="Typo.subtitle1"><b>Regole di Validazione</b></MudText>
                         <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="AddRule" Size="Size.Small" Variant="Variant.Outlined">Nuova Regola</MudButton>
                     </div>
-                    @if (_model.RuleDefinitions != null)
+                    @foreach (var rule in _model.RuleDefinitions)
                     {
-                        @foreach (var rule in _model.RuleDefinitions)
-                        {
-                            <MudPaper Outlined="true" Class="pa-3 mb-2">
-                                <MudGrid Dense="true">
-                                    <MudItem xs="12" md="3">
-                                        <MudTextField @bind-Value="rule.Name" Label="Nome Regola" Margin="Margin.Dense" />
-                                    </MudItem>
-                                    <MudItem xs="12" md="5">
-                                        @if (rule.Condition != null)
+                        <MudPaper Outlined="true" Class="pa-3 mb-2">
+                            <MudGrid Dense="true">
+                                <MudItem xs="12" md="3">
+                                    <MudTextField @bind-Value="rule.Name" Label="Nome Regola" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" md="5">
+                                    @if (rule.Condition != null)
+                                    {
+                                        <MudTextField @bind-Value="rule.Condition.Expression" Label="Condizione (es. > 80)" Margin="Margin.Dense" />
+                                    }
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudSelect T="CheckStatusTypes?" Label="Status se Passa" @bind-Value="rule.ResultsOnPass" Margin="Margin.Dense">
+                                        @foreach (CheckStatusTypes status in Enum.GetValues(typeof(CheckStatusTypes)))
                                         {
-                                            <MudTextField @bind-Value="rule.Condition.Expression" Label="Condizione (es. > 80)" Margin="Margin.Dense" />
+                                            <MudSelectItem Value="@((CheckStatusTypes?)status)">@status.ToString()</MudSelectItem>
                                         }
-                                    </MudItem>
-                                    <MudItem xs="12" md="2">
-                                        <MudSelect T="CheckStatusTypes?" Label="Status se Passa" @bind-Value="rule.ResultsOnPass" Margin="Margin.Dense">
-                                            @foreach (CheckStatusTypes status in Enum.GetValues(typeof(CheckStatusTypes)))
-                                            {
-                                                <MudSelectItem Value="@((CheckStatusTypes?)status)">@status.ToString()</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                    </MudItem>
-                                    <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => _model.RuleDefinitions.Remove(rule))" Size="Size.Small" />
-                                    </MudItem>
-                                </MudGrid>
-                            </MudPaper>
-                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="1" Class="d-flex align-center justify-end">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => _model.RuleDefinitions.Remove(rule))" Size="Size.Small" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
                     }
                 </MudItem>
 
-                @* Remediation *@
+                @* --- REMEDIATION --- *@
                 <MudItem xs="12" Class="mt-2">
                     <MudText Typo="Typo.subtitle2" Class="mb-n2">Rimedio Suggerito</MudText>
                     <MudGrid Dense="true">
@@ -168,7 +190,6 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
-
     [Parameter] public List<string> AvailableMetrics { get; set; } = new();
 
     private AddCheckHttpRequest _model = new();
@@ -177,59 +198,67 @@
 
     protected override void OnInitialized()
     {
-        _model ??= new();
         _model.DataSampleQuery ??= new();
         _model.DataSampleQuery.MetricQueries ??= new();
         _model.RuleDefinitions ??= new();
         _model.Remediation ??= new();
+        _model.TemplateLocalizedMessages ??= new();
 
+        // Inizializzazione Default
         _model.CheckQueryType = CheckQueryTypes.TimeRange;
         _model.DefaultResult = CheckStatusTypes.Success;
         _model.Category = CheckCategoryTypes.Performance;
 
-        if (!_model.DataSampleQuery.MetricQueries.Any())
+        // Almeno un record di localizzazione obbligatorio
+        if (!_model.TemplateLocalizedMessages.Any())
         {
-            AddMetricField();
+            _model.TemplateLocalizedMessages.Add("it-IT", "");
         }
 
-        if (!_model.RuleDefinitions.Any())
-        {
-            AddRule();
-        }
+        if (!_model.DataSampleQuery.MetricQueries.Any()) AddMetricField();
+        if (!_model.RuleDefinitions.Any()) AddRule();
     }
 
-    private void AddMetricField()
+    private void AddLocalization()
     {
-        _model.DataSampleQuery.MetricQueries.Add(new AddMetricDataSampleQueryHttpRequest());
+        var defaults = new[] { "en-US", "fr-FR", "es-ES" };
+        foreach (var lang in defaults)
+        {
+            if (!_model.TemplateLocalizedMessages.ContainsKey(lang))
+            {
+                _model.TemplateLocalizedMessages.Add(lang, "");
+                break;
+            }
+        }
     }
+
+    private void OnLanguageKeyChanged(string oldKey, string newKey)
+    {
+        if (oldKey == newKey || _model.TemplateLocalizedMessages.ContainsKey(newKey)) return;
+        var value = _model.TemplateLocalizedMessages[oldKey];
+        _model.TemplateLocalizedMessages.Remove(oldKey);
+        _model.TemplateLocalizedMessages[newKey] = value;
+    }
+
+    private void AddMetricField() => _model.DataSampleQuery.MetricQueries.Add(new AddMetricDataSampleQueryHttpRequest());
 
     private void OnQueryMetricChanged(string newMetric, AddMetricDataSampleQueryHttpRequest metricItem)
     {
         metricItem.MetricName = newMetric;
-
         if (!string.IsNullOrEmpty(newMetric))
         {
-            // Sostituisce i punti con underscore
             string normalized = newMetric.Replace(".", "_");
-
-            // 1. Compila il ProjectedMetricName della riga corrente
             metricItem.ProjectedMetricName = normalized;
-
-            // 2. Compila il campo Expression della prima regola (se esiste ed è vuota o vuoi sovrascriverla)
             var firstRule = _model.RuleDefinitions.FirstOrDefault();
-            if (firstRule?.Condition != null)
-            {
-                // Qui puoi decidere se aggiungere solo il nome o se inizializzarlo con uno spazio
-                firstRule.Condition.Expression = $"{normalized} ";
-            }
+            if (firstRule?.Condition != null) firstRule.Condition.Expression = $"{normalized} ";
         }
     }
 
     private void OnQueryTypeChanged(CheckQueryTypes? newType)
     {
         _model.CheckQueryType = newType;
-        if (newType == CheckQueryTypes.Single) { _model.ItemsCount = 1; }
-        else if (newType == CheckQueryTypes.Count && (_model.ItemsCount ?? 0) <= 1) { _model.ItemsCount = 10; }
+        if (newType == CheckQueryTypes.Single) _model.ItemsCount = 1;
+        else if (newType == CheckQueryTypes.Count && (_model.ItemsCount ?? 0) <= 1) _model.ItemsCount = 10;
     }
 
     private void AddRule()
@@ -245,9 +274,16 @@
 
     private async Task Submit()
     {
+        // VALIDAZIONI
         if (string.IsNullOrWhiteSpace(_model.Name))
         {
             Snackbar.Add("Il nome è obbligatorio", Severity.Warning);
+            return;
+        }
+
+        if (_model.TemplateLocalizedMessages.Values.Any(string.IsNullOrWhiteSpace))
+        {
+            Snackbar.Add("Compila tutti i messaggi localizzati o rimuovi quelli vuoti", Severity.Warning);
             return;
         }
 
@@ -256,10 +292,7 @@
         {
             if (_model.CheckQueryType == CheckQueryTypes.TimeRange)
             {
-                if (TimeSpan.TryParse(_itemsTimeRangeString, out var ts))
-                {
-                    _model.ItemsTimeRange = _itemsTimeRangeString;
-                }
+                _model.ItemsTimeRange = _itemsTimeRangeString;
                 _model.ItemsCount = null;
             }
             else
@@ -285,7 +318,6 @@
             }
             else
             {
-                var errorDetail = await response.Content.ReadAsStringAsync();
                 Snackbar.Add($"Errore API: {response.StatusCode}.", Severity.Error);
             }
         }

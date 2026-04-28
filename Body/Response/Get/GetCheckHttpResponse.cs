@@ -21,6 +21,9 @@ namespace GlassBoard.Response.Get
         [JsonPropertyName("name")]
         public string Name { get; set; }
 
+        [JsonPropertyName("templateLocalizedMessages")]
+        public Dictionary<string, string> TemplateLocalizedMessages { get; set; }
+
         [JsonPropertyName("category")]
         public string Category { get; set; }
 

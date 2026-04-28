@@ -27,12 +27,16 @@
         public AddDataSampleQueryHttpRequest? DataSampleQuery { get; set; } 
 
         public List<AddRuleDefinitionHttpRequest>? RuleDefinitions { get; set; } = new();
+
         public AddRemediationHttpRequest? Remediation { get; set; } = new();
+
+        public Dictionary<string, string> TemplateLocalizedMessages { get; set; } = new();
     }
 
     public class AddRuleDefinitionHttpRequest
     {
         public string? Name { get; set; }
+
         public AddRuleConditionHttpRequest? Condition { get; set; } = new();
 
         [JsonConverter(typeof(JsonStringEnumConverter))]

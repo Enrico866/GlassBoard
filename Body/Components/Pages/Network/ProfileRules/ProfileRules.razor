@@ -1,0 +1,256 @@
+﻿@page "/network/profile-rules"
+@using GlassBoard.Abstractions.Provider
+@using GlassBoard.Response.Get
+@using SharedLibrary.Enum
+@inject IProfileRuleProvider ProfileRuleProvider
+@inject IObservableProvider ObservableProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ICheckProvider CheckProvider
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <MudText Typo="Typo.h5" Color="Color.Primary">Regole di Associazione Profili</MudText>
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Add" 
+                   OnClick="OpenAddProfileRuleDialog">
+            Nuova Regola
+        </MudButton>
+    </MudStack>
+
+    <MudDataGrid Items="@_rules" 
+                 Loading="@_loading" 
+                 Dense="true" 
+                 Hover="true" 
+                 Bordered="true" 
+                 Striped="true"
+                 QuickFilter="@_quickFilter">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_searchString" 
+                          Placeholder="Cerca regola..." 
+                          Adornment="Adornment.Start" 
+                          Immediate="true"
+                          AdornmentIcon="@Icons.Material.Filled.Search" 
+                          IconSize="Size.Medium" 
+                          Class="mt-0" />
+        </ToolBarContent>
+        <Columns>
+            <HierarchyColumn T="ProfileRuleItem" />
+
+            @* Specifichiamo esplicitamente T e TProperty *@
+            <PropertyColumn T="ProfileRuleItem" TProperty="int" Property="x => x.Order" Title="Ordine" Width="80px" />
+            <PropertyColumn T="ProfileRuleItem" TProperty="string" Property="x => x.Name" Title="Nome Regola" />
+
+            <TemplateColumn T="ProfileRuleItem" Title="Matching Padre">
+                <CellTemplate>
+                    <div class="d-flex flex-wrap gap-1">
+                        @foreach (var type in context.Item.MatchingRuleSet.ResourceTypes)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">@type</MudChip>
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+
+            <TemplateColumn T="ProfileRuleItem" Title="Profilo Collection">
+                <CellTemplate>
+                    <b>@GetProfileName(context.Item.ProfileSet.CollectionProfileId)</b>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ProfileRuleItem" Title="Profilo Check">
+                <CellTemplate>
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">
+                        @GetCheckName(context.Item.ProfileSet.CheckProfileId)
+                    </MudText>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ProfileRuleItem" CellClass="d-flex justify-end">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small"
+                                   Color="Color.Inherit"
+                                   OnClick="@(() => OpenEditDialog(context.Item))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Size="Size.Small"
+                                   Color="Color.Error"
+                                   OnClick="@(() => OnDeleteClicked(context.Item))" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <ChildRowContent>
+            <MudCard Elevation="0" Class="ma-4 pa-4" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Sotto-regole per risorse figlie (@context.Item.ChildrenProfileRules.Count)</MudText>
+                @if (context.Item.ChildrenProfileRules.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                        <thead>
+                            <tr>
+                                <th>Tipi Risorsa Figlio</th>
+                                <th>Collection Profile</th>
+                                <th>Check Profile</th>
+                                <th>Attributi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var child in context.Item.ChildrenProfileRules)
+                            {
+                                <tr>
+                                    <td>
+                                        @foreach (var type in child.MatchingRuleSet.ResourceTypes)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@type</MudChip>
+                                        }
+                                    </td>
+                                    <td>@GetProfileName(child.ProfileSet.CollectionProfileId)</td>
+                                    <td>@GetCheckName(child.ProfileSet.CheckProfileId)</td>
+                                    <td>
+                                        @foreach (var attr in child.MatchingRuleSet.Attributes)
+                                        {
+                                            <code style="font-size: 0.75rem;">@attr.Key=@attr.Value</code>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption">Nessuna sotto-regola definita.</MudText>
+                }
+            </MudCard>
+        </ChildRowContent>
+        <NoRecordsContent>
+            <MudText>Nessuna regola trovata.</MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText>Caricamento regole...</MudText>
+        </LoadingContent>
+        
+    </MudDataGrid>
+</MudContainer>
+
+@code {
+    private List<ProfileRuleItem> _rules = new();
+    private bool _loading = true;
+    private string _searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ObservableProvider.InitializeAsync(); // Carica i nomi dei profili per la visualizzazione
+        await LoadRules();
+    }
+
+    private async Task OpenEditDialog(ProfileRuleItem item)
+    {
+        var parameters = new DialogParameters<AddProfileRuleDialog>
+        {
+            { x => x.EntityToEdit, item }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<AddProfileRuleDialog>("Modifica Regola", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled) await LoadRules();
+    }
+
+    private async Task OnDeleteClicked(ProfileRuleItem item)
+    {
+        // Dialogo di conferma veloce
+        var parameters = new DialogParameters<MudDialog>();
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        var result = await DialogService.ShowMessageBox(
+            "Conferma Eliminazione",
+            $"Sei sicuro di voler eliminare la regola '{item.Name}'?",
+            yesText: "Elimina", cancelText: "Annulla");
+
+        if (result == true)
+        {
+            await DeleteRule(item.Id);
+        }
+    }
+
+    private async Task DeleteRule(string id)
+    {
+        _loading = true;
+        try
+        {
+            var success = await ProfileRuleProvider.DeleteProfileRuleAsync(id);
+            if (success)
+            {
+                Snackbar.Add("Regola eliminata correttamente", Severity.Success);
+                await LoadRules(); // Ricarica la lista
+            }
+            else
+            {
+                Snackbar.Add("Impossibile eliminare la regola", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadRules()
+    {
+        _loading = true;
+        try
+        {
+            // Nota: Adattiamo la chiamata alla tua risposta paginata
+            var response = await ProfileRuleProvider.GetProfileRulesAsync();
+            _rules = response?.Items ?? new List<ProfileRuleItem>();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Errore nel caricamento delle regole", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string GetCheckName(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "-";
+        var check = CheckProvider.GetCheckById(id);
+        // Se GetCheckById ritorna un nuovo CheckModel se non trovato,
+        // verifichiamo se il Name è null
+        return string.IsNullOrEmpty(check.Name) ? id : check.Name;
+    }
+
+    private string GetProfileName(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "Nessuno";
+        var collector = ObservableProvider.GetAllAvailableProfiles().FirstOrDefault(c => c.Id == id);
+        return collector?.Name ?? id; // Ritorna l'ID se il nome non è in cache
+    }
+
+    private Func<ProfileRuleItem, bool> _quickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (x.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (x.MatchingRuleSet.ResourceTypes.Any(t => t.Contains(_searchString, StringComparison.OrdinalIgnoreCase))) return true;
+        return false;
+    };
+
+    private async Task OpenAddProfileRuleDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<AddProfileRuleDialog>("Crea Nuova Regola", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadRules();
+        }
+    }
+}

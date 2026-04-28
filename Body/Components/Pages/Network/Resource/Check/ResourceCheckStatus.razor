@@ -1,4 +1,5 @@
 ﻿@using System.Net.Http.Headers
+@using System.Net.Http.Json
 @using GlassBoard.Abstractions.Service
 @using GlassBoard.Response
 @using GlassBoard.Response.Get
@@ -38,18 +39,22 @@
                     <div class="mb-4 pa-2" style="border-left: 4px solid var(--mud-palette-secondary); background: var(--mud-palette-background-grey); border-radius: 4px;">
                         <MudText Typo="Typo.subtitle1" Class="ml-2"><b>@profile.Name</b></MudText>
 
-                        @* Forziamo il tipo T="CheckModel" e usiamo una variabile di contesto esplicita *@
-                        <MudTable Items="@profile.RuleDetails" Dense="true" Hover="true" Elevation="0" T="CheckModel" Class="mt-2">
+                        <MudTable Items="@profile.RuleDetails" Dense="true" Hover="true" Elevation="0" T="CheckModel" Class="mt-2 bg-transparent">
                             <HeaderContent>
-                                <MudTh>Check</MudTh>
+                                <MudTh>Check e Descrizione</MudTh>
                                 <MudTh>Esito</MudTh>
                                 <MudTh>Ultima Esecuzione</MudTh>
                             </HeaderContent>
                             <RowTemplate Context="contextoCheck">
                                 <MudTd DataLabel="Check">
                                     <div class="d-flex flex-column">
-                                        <MudText Typo="Typo.body2">@contextoCheck.Name</MudText>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@contextoCheck.Category</MudText>
+                                        @* Visualizziamo il messaggio localizzato come testo principale *@
+                                        <MudText Typo="Typo.body2"><b>@GetLocalizedMessage(contextoCheck)</b></MudText>
+                                        <div class="d-flex align-center gap-2">
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@contextoCheck.Name</MudText>
+                                            <MudDivider Vertical="true" FlexItem="true" Style="height: 12px;" />
+                                            <MudText Typo="Typo.caption" Color="Color.Info">@contextoCheck.Category</MudText>
+                                        </div>
                                     </div>
                                 </MudTd>
                                 <MudTd DataLabel="Esito">
@@ -57,12 +62,13 @@
                                              Icon="@GetIconForId(contextoCheck.Id)"
                                              Color="@GetColorForId(contextoCheck.Id)"
                                              Size="Size.Small"
-                                             Variant="Variant.Text">
+                                             Variant="Variant.Filled">
                                         @GetResultTextForId(contextoCheck.Id)
                                     </MudChip>
                                 </MudTd>
                                 <MudTd DataLabel="Ultima Esecuzione">
                                     <MudText Typo="Typo.caption">
+                                        <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" Style="font-size: 0.8rem;" />
                                         @GetDateForId(contextoCheck.Id)
                                     </MudText>
                                 </MudTd>
@@ -83,7 +89,30 @@
     private List<CheckResourceResultModel> _checkResults = new();
     private bool _loading = true;
 
-    // METODI HELPER DIRETTI - Risolvono l'errore "does not exist in current context"
+    // --- LOGICA DI LOCALIZZAZIONE ---
+    private string GetLocalizedMessage(CheckModel check)
+    {
+        if (check.TemplateLocalizedMessages == null || !check.TemplateLocalizedMessages.Any())
+            return check.Name;
+
+        // Recuperiamo la cultura corrente (es. it-IT)
+        var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+        string message = "";
+        if (!check.TemplateLocalizedMessages.TryGetValue(culture, out message))
+        {
+            // Fallback su Inglese o sul primo disponibile
+            if (!check.TemplateLocalizedMessages.TryGetValue("en-US", out message))
+            {
+                message = check.TemplateLocalizedMessages.Values.FirstOrDefault();
+            }
+        }
+
+        // Placeholder replacement (se presente il nome risorsa nei metadati o parametri, qui usiamo un placeholder generico)
+        return (message ?? check.Name).Replace("{name}", "Risorsa");
+    }
+
+    // --- METODI HELPER ESITI ---
     private string GetResultTextForId(string checkId) =>
         _checkResults?.FirstOrDefault(r => r.CheckId == checkId)?.Result ?? "N/D";
 
@@ -145,7 +174,6 @@
 
                         foreach (var profile in _activeProfiles)
                         {
-                            // Filtro manuale per evitare ambiguità di delegate
                             var matching = new List<CheckModel>();
                             foreach (var id in profile.CheckIds)
                             {
@@ -168,9 +196,7 @@
 
     private async Task<HttpResponseMessage> SendGetRequest(string url, string token)
     {
-
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-    
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-MYDEV-CHANNEL", Config["ResourceApi:Channel"]);
         request.Headers.Add("X-MYDEV-APPNAME", "glass");
