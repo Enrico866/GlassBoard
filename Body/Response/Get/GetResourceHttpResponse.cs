@@ -16,16 +16,22 @@ public class GetResourceHttpResponse
 
 public class ResourceApiDto
 {
-    [JsonPropertyName("id")] public string Id { get; set; }
-    [JsonPropertyName("path")] public string Path { get; set; }
-    [JsonPropertyName("name")] public string Name { get; set; }
-    [JsonPropertyName("probeId")] public string ProbeId { get; set; }
-    [JsonPropertyName("organizationId")] public string OrganizationId { get; set; }
-    [JsonPropertyName("description")] public string Description { get; set; }
-    [JsonPropertyName("isObserved")] public bool IsMonitored { get; set; }
-    [JsonPropertyName("severityType")] public string SeverityType { get; set; }
+    [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("path")] public string Path { get; set; } = string.Empty;
+    [JsonPropertyName("description")] public string Description { get; set; } = string.Empty;
     
-    // Mappatura nomi divergenti
+    // Mappato su isObserved nel JSON
+    [JsonPropertyName("isObserved")] public bool IsMonitored { get; set; }
+    
+    [JsonPropertyName("probeId")] public string ProbeId { get; set; } = string.Empty;
+    [JsonPropertyName("organizationId")] public string OrganizationId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("severityType")] public string SeverityType { get; set; } = string.Empty;
+    [JsonPropertyName("serialNumber")] public string SerialNumber { get; set; } = string.Empty;
+    [JsonPropertyName("partNumber")] public string PartNumber { get; set; } = string.Empty;
+    [JsonPropertyName("os")] public string Os { get; set; } = string.Empty;
+
     [JsonPropertyName("attributes")] 
     public List<ResourceAttributeDto> Attributes { get; set; } = new();
     
@@ -38,34 +44,77 @@ public class ResourceApiDto
     [JsonPropertyName("resourceTypes")] 
     public List<string> ResourceTypes { get; set; } = new();
 
-    [JsonPropertyName("checkProfileIds")]
-    public List<string>? CheckProfileIds { get; set; } = new();
-
     [JsonPropertyName("collectionProfileIds")]
     public List<string> CollectionProfileIds { get; set; } = new();
 
+    // RISOLVE ERRORE: AutoAssignedCollectionProfileIds
     [JsonPropertyName("autoAssignedCollectionProfileIds")]
     public List<string> AutoAssignedCollectionProfileIds { get; set; } = new();
 
+    [JsonPropertyName("checkProfileIds")]
+    public List<string>? CheckProfileIds { get; set; } = new();
+
+    [JsonPropertyName("alertProfileIds")]
+    public List<string> AlertProfileIds { get; set; } = new();
+
+    // RISOLVE ERRORE: SecurityIds
     [JsonPropertyName("securityIds")]
     public List<string> SecurityIds { get; set; } = new();
 
+    // RISOLVE ERRORE: Conversione DateTime? a string
     [JsonPropertyName("lastMetricsTimestamp")]
-    public string LastMetricsTimestamp { get; set; }
+    public string LastMetricsTimestamp { get; set; } = string.Empty;
 
     [JsonPropertyName("availableMetricNames")]
     public List<string> AvailableMetricNames { get; set; } = new();
+
+    [JsonPropertyName("modifiedOn")]
+    public DateTime ModifiedOn { get; set; }
+
+    [JsonPropertyName("modifier")]
+    public ResourceModifierDto? Modifier { get; set; }
 }
 
 public class ResourceAttributeDto
 {
-    [JsonPropertyName("key")] public string Key { get; set; }
-    [JsonPropertyName("value")] public string Value { get; set; }
+    [JsonPropertyName("key")] public string Key { get; set; } = string.Empty;
+    [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
 }
 
 public class ResourceAccessDto
 {
-    [JsonPropertyName("instruments")] public List<string> Instruments { get; set; } = new();
-    [JsonPropertyName("accessScopes")] public List<string> AccessScopes { get; set; } = new();
-    [JsonPropertyName("address")] public string Address { get; set; }
+    [JsonPropertyName("address")] 
+    public string Address { get; set; } = string.Empty;
+
+    [JsonPropertyName("accessScopes")] 
+    public List<string> AccessScopes { get; set; } = new();
+
+    // MODIFICA CHIAVE: Instruments ora è una lista di oggetti, non di stringhe
+    [JsonPropertyName("instruments")] 
+    public List<ResourceInstrumentDto> Instruments { get; set; } = new();
+}
+
+public class ResourceInstrumentDto
+{
+    [JsonPropertyName("instrumentType")] 
+    public string InstrumentType { get; set; } = string.Empty;
+
+    [JsonPropertyName("snmpVersion")] 
+    public string? SnmpVersion { get; set; }
+
+    [JsonPropertyName("securityId")] 
+    public string? SecurityId { get; set; }
+
+    [JsonPropertyName("shouldLock")] 
+    public bool? ShouldLock { get; set; }
+
+    [JsonPropertyName("timeoutSeconds")] 
+    public int? TimeoutSeconds { get; set; }
+}
+
+public class ResourceModifierDto
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("firstName")] public string FirstName { get; set; } = string.Empty;
+    [JsonPropertyName("lastName")] public string LastName { get; set; } = string.Empty;
 }

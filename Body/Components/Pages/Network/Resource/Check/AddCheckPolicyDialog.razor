@@ -136,9 +136,9 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public List<string> AvailableMetrics { get; set; } = new();
     [Parameter] public string ResourceId { get; set; }
     [Parameter] public List<string> CurrentPolicyIds { get; set; } = new();
-    [Parameter] public List<string> AvailableMetrics { get; set; } = new();
 
     private AddCheckPolicyHttpRequest _request = new();
     private IEnumerable<string> _selectedCheckIds = new HashSet<string>();

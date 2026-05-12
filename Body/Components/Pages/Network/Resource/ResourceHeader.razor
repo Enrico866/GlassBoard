@@ -101,7 +101,7 @@
         
         // Conversione sicura da stringa a Enum InstrumentTypes
         var availableInstruments = access.Instruments?
-            .Select(i => Enum.TryParse<InstrumentTypes>(i, true, out var result) ? result : InstrumentTypes.Snmp)
+            .Select(i => Enum.TryParse<InstrumentTypes>(i.InstrumentType, true, out var result) ? result : InstrumentTypes.Snmp)
             .Where(i => i == InstrumentTypes.Snmp)
             .ToList() ?? new();
 

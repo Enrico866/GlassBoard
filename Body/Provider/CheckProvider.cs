@@ -1,5 +1,6 @@
 ﻿using GlassBoard.Abstractions.Provider;
 using GlassBoard.Abstractions.Service;
+using GlassBoard.Request.Add;
 using GlassBoard.Response.Get;
 
 namespace GlassBoard.Provider
@@ -22,16 +23,33 @@ namespace GlassBoard.Provider
         {
             if (_isInitialized && !forceRefresh) return;
 
-            var items = await _service.GetAllChecksAsync();
-            _checks = items;
-            _isInitialized = true;
-            
-            Console.WriteLine($"[CheckProvider] Cache caricata con {_checks.Count} check.");
+            try 
+            {
+                var items = await _service.GetAllChecksAsync();
+                _checks = items ?? new List<CheckModel>();
+                _isInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CheckProvider] Errore durante l'inizializzazione: {ex.Message}");
+                _checks = new List<CheckModel>();
+            }
         }
 
         public CheckModel GetCheckById(string id)
         {
             return _checks.FirstOrDefault(c => c.Id == id) ?? new CheckModel();
+        }
+
+        public async Task<string?> AddCheckAsync(AddCheckHttpRequest request)
+        {
+            var newId = await _service.AddCheckAsync(request);
+            if (!string.IsNullOrEmpty(newId))
+            {
+                // Opzionale: rinfresca la cache dopo l'aggiunta
+                await InitializeAsync(forceRefresh: true);
+            }
+            return newId;
         }
 
         public List<CheckModel> GetChecksByMetric(string metricName)
@@ -40,10 +58,10 @@ namespace GlassBoard.Provider
 
             // Logica di navigazione della gerarchia mantenuta e pulita
             return _checks.Where(c => 
-                c.DataSampleQuery?.MetricQueries != null && 
-                c.DataSampleQuery.MetricQueries.Any(m => 
-                    string.Equals(m.MetricName, metricName, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(m.ProjectedMetricName, metricName, StringComparison.OrdinalIgnoreCase)
+                c.DataSampleQuery?.InputQueries != null && 
+                c.DataSampleQuery.InputQueries.Any(m => 
+                    string.Equals(m.InputName, metricName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(m.ProjectedInputName, metricName, StringComparison.OrdinalIgnoreCase)
                 )
             ).ToList();
         }

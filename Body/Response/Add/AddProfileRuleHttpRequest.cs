@@ -25,9 +25,9 @@
 
     public class ProfileSet
     {
-        public string CollectionProfileId { get; set; }
-        public string CheckProfileId { get; set; }
-        public string AlertProfileId { get; set; }
+        public string[] CollectionProfileIds { get; set; }
+        public string[] CheckProfileIds { get; set; }
+        public string[] AlertProfileIds { get; set; }
     }
 
     public class ChildProfileRule

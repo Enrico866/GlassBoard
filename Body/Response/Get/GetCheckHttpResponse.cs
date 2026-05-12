@@ -30,27 +30,18 @@ namespace GlassBoard.Response.Get
         [JsonPropertyName("defaultResult")]
         public string DefaultResult { get; set; }
 
-        [JsonPropertyName("checkQueryType")]
-        public string CheckQueryType { get; set; }
-
-        [JsonPropertyName("itemsTimeRange")]
-        public string ItemsTimeRange { get; set; }
-
-        [JsonPropertyName("itemsCount")]
-        public int? ItemsCount { get; set; }
-
         [JsonPropertyName("dataSampleQuery")]
         public DataSampleQuery DataSampleQuery { get; set; }
 
         [JsonPropertyName("ruleDefinitions")]
         public List<RuleDefinition> RuleDefinitions { get; set; } = new();
 
-        // Mappatura per i risultati storici per risorsa
-        [JsonPropertyName("lastCheckResultsByResource")]
-        public Dictionary<string, LastCheckResult> LastCheckResultsByResource { get; set; } = new();
-
         [JsonPropertyName("remediation")]
         public RemediationInfo Remediation { get; set; }
+
+        // Mappatura per i risultati storici (se inclusi in altre chiamate)
+        [JsonPropertyName("lastCheckResultsByResource")]
+        public Dictionary<string, LastCheckResult> LastCheckResultsByResource { get; set; } = new();
 
         [JsonPropertyName("createdOn")]
         public DateTime CreatedOn { get; set; }
@@ -67,23 +58,37 @@ namespace GlassBoard.Response.Get
 
     public class DataSampleQuery
     {
-        [JsonPropertyName("metricQueries")]
-        public List<MetricQuery> MetricQueries { get; set; } = new();
+        // Corretto: l'API restituisce "inputQueries", non "metricQueries"
+        [JsonPropertyName("inputQueries")]
+        public List<InputQuery> InputQueries { get; set; } = new();
     }
 
-    public class MetricQuery
+    public class InputQuery
     {
-        [JsonPropertyName("metricName")]
-        public string MetricName { get; set; }
+        [JsonPropertyName("checkQueryType")]
+        public string CheckQueryType { get; set; }
 
-        [JsonPropertyName("projectedMetricName")]
-        public string ProjectedMetricName { get; set; }
+        [JsonPropertyName("itemsTimeRange")]
+        public string? ItemsTimeRange { get; set; }
+
+        [JsonPropertyName("itemsCount")]
+        public int? ItemsCount { get; set; }
+
+        [JsonPropertyName("inputName")]
+        public string InputName { get; set; }
+
+        [JsonPropertyName("projectedInputName")]
+        public string ProjectedInputName { get; set; }
     }
 
     public class RuleDefinition
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        // Aggiunto perché presente nel JSON per alcune regole
+        [JsonPropertyName("templateLocalizedMessages")]
+        public Dictionary<string, string>? TemplateLocalizedMessages { get; set; }
 
         [JsonPropertyName("condition")]
         public RuleCondition Condition { get; set; }
@@ -118,8 +123,6 @@ namespace GlassBoard.Response.Get
         [JsonPropertyName("metadata")]
         public Dictionary<string, object> Metadata { get; set; }
 
-        // Usiamo object perché nel tuo JSON "inputs" contiene sia valori semplici (1, 2) 
-        // che oggetti complessi (avg, min, max...)
         [JsonPropertyName("inputs")]
         public Dictionary<string, object> Inputs { get; set; }
     }
@@ -127,12 +130,12 @@ namespace GlassBoard.Response.Get
     public class RemediationInfo
     {
         [JsonPropertyName("summary")]
-        public string Summary { get; set; }
+        public string? Summary { get; set; }
 
         [JsonPropertyName("suggestedAction")]
-        public string SuggestedAction { get; set; }
+        public string? SuggestedAction { get; set; }
 
         [JsonPropertyName("riskIfIgnored")]
-        public string RiskIfIgnored { get; set; }
+        public string? RiskIfIgnored { get; set; }
     }
 }

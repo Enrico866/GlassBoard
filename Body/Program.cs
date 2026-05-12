@@ -3,6 +3,7 @@ using GlassBoard.Abstractions.Provider;
 using GlassBoard.Abstractions.Service;
 using GlassBoard.Components;
 using GlassBoard.Provider;
+using GlassBoard.Providers;
 using GlassBoard.Services;
 
 using MudBlazor.Services;
@@ -65,6 +66,7 @@ builder.Services.Configure<CollectorApiOptions>(options =>
 });
 builder.Services.Configure<CheckApiOptions>(builder.Configuration.GetSection("ResourceApi"));
 builder.Services.Configure<CheckPolicyApiOptions>(builder.Configuration.GetSection("ResourceApi"));
+builder.Services.Configure<AlertApiOptions>(builder.Configuration.GetSection("ResourceApi"));
 builder.Services.Configure<JobApiOptions>(options => {
     builder.Configuration.GetSection("ResourceApi").Bind(options);
     options.AdminUser = builder.Configuration["Tenant:Admin:User"] ?? "";
@@ -82,6 +84,7 @@ builder.Services.AddScoped<ICollectorProvider, CollectorProvider>();
 builder.Services.AddScoped<ISchedulingProvider, SchedulingProvider>();
 builder.Services.AddScoped<ISecurityProvider, SecurityProvider>();
 builder.Services.AddScoped<IProfileRuleProvider, ProfileRuleProvider>();
+builder.Services.AddScoped<IAlertProvider, AlertProvider>();
 
 builder.Services.AddScoped<AppContextService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -97,7 +100,7 @@ builder.Services.AddScoped<ICheckService, CheckService>();
 builder.Services.AddScoped<ICheckPolicyService, CheckPolicyService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IProfileRuleService, ProfileRuleService>();
-
+builder.Services.AddScoped<IAlertService, AlertService>();
 
 var app = builder.Build();
 

@@ -1,17 +1,20 @@
-﻿@using MongoDB.Bson
-@using GlassBoard.Abstractions
-@using static SharedLibrary.Enum.Enums
+﻿@using SharedLibrary.Models
 
-<MudCard Outlined="true" Class="mt-4">
+<MudCard Outlined="true" Class="mt-4 shadow-sm">
     <MudCardHeader>
         <CardHeaderContent>
-            <MudText Typo="Typo.h6">Configurazione Accessi</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.VpnKey" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">Configurazione Accessi</MudText>
+            </MudStack>
         </CardHeaderContent>
     </MudCardHeader>
     <MudCardContent>
         @if (AccessList == null || !AccessList.Any())
         {
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Nessuna configurazione di accesso definita.</MudText>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                Nessuna configurazione di accesso definita.
+            </MudAlert>
         }
         else
         {
@@ -19,32 +22,54 @@
                 <HeaderContent>
                     <MudTh>Indirizzo / Host</MudTh>
                     <MudTh>Strumenti</MudTh>
-                    <MudTh>Scope</MudTh>
+                    <MudTh>Ambiti (Scopes)</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Address">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Color="Color.Info" />
-                            <MudText Typo="Typo.body2">@access.Address</MudText>
+                            <MudText Typo="Typo.body2"><b>@access.Address</b></MudText>
                         </MudStack>
                     </MudTd>
                     <MudTd DataLabel="Instruments">
                         <div class="d-flex flex-wrap gap-1">
-                            @foreach (var instId in access.Instruments)
+                            @if (access.Instruments?.Any() == true)
                             {
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary">
-                                    @GetInstrumentName(instId)
-                                </MudChip>
+                                @foreach (var inst in access.Instruments)
+                                {
+                                    <MudTooltip Text="@($"Timeout: {inst.TimeoutSeconds ?? 5}s")">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary">
+                                            @FormatTechnicalName(inst.InstrumentType)
+                                            @if (!string.IsNullOrEmpty(inst.SnmpVersion))
+                                            {
+                                                <span class="ml-1" style="font-size: 0.7rem; opacity: 0.8;">(@inst.SnmpVersion)</span>
+                                            }
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary"><i>Standard</i></MudText>
                             }
                         </div>
                     </MudTd>
                     <MudTd DataLabel="Scopes">
-                        @foreach (var scope in access.AccessScopes)
-                        {
-                            <MudChip T="int" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
-                                @GetAccessScopeName(scope)
-                            </MudChip>
-                        }
+                        <div class="d-flex flex-wrap gap-1">
+                            @if (access.AccessScopes?.Any() == true)
+                            {
+                                @foreach (var scope in access.AccessScopes)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">
+                                        @FormatTechnicalName(scope)
+                                    </MudChip>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary"><i>Generico</i></MudText>
+                            }
+                        </div>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -53,31 +78,26 @@
 </MudCard>
 
 @code {
-    [Parameter] public List<ResourceAccessItem> AccessList { get; set; }
+    [Parameter] public List<ResourceAccess> AccessList { get; set; } = new();
 
-    private string GetInstrumentName(int id)
+    /// <summary>
+    /// Trasforma nomi come "MonitoringService" in "Monitoring Service"
+    /// o gestisce mappature specifiche.
+    /// </summary>
+    private string FormatTechnicalName(string technicalName)
     {
-        if (Enum.IsDefined(typeof(InstrumentTypes), id))
+        if (string.IsNullOrWhiteSpace(technicalName)) return "N/D";
+
+        // Eseguiamo una mappatura manuale per i casi noti
+        return technicalName switch
         {
-            return ((InstrumentTypes)id).ToString();
-        }
-        return $"Unknown ({id})";
-    }
-
-    private string GetAccessScopeName(int id)
-    {
-        if (Enum.IsDefined(typeof(AccessScopeTypes), id))
-        {
-            return ((AccessScopeTypes)id).ToString();
-        }
-        return $"Unknown ({id})";
-    }
-    
-
-    public class ResourceAccessItem
-    {
-        public List<int> Instruments { get; set; } = new();
-        public List<int> AccessScopes { get; set; } = new();
-        public string Address { get; set; }
+            "MonitoringService" => "Monitoring Service",
+            "ConfigurationService" => "Configuration Service",
+            "Snmp" => "SNMP",
+            "Ssh" => "SSH",
+            "Http" => "HTTP",
+            "Https" => "HTTPS",
+            _ => System.Text.RegularExpressions.Regex.Replace(technicalName, "([a-z])([A-Z])", "$1 $2")
+        };
     }
 }

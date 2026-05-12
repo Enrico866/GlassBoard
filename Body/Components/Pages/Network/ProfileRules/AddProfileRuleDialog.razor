@@ -3,6 +3,7 @@
 @using GlassBoard.Request.Add
 @using GlassBoard.Abstractions.Provider
 @using GlassBoard.Response.Get
+@using SharedLibrary.Models
 @using static SharedLibrary.Enum.Enums
 @inject IProfileRuleProvider ProfileRuleProvider
 @inject IObservableProvider ObservableProvider
@@ -73,29 +74,35 @@
                         </MudPaper>
                     </MudItem>
 
-                    <MudItem xs="12" md="6" Class="mt-2">
-                        <MudSelect T="string" @bind-Value="_model.ProfileSet.CollectionProfileId" Label="Collection Profile Padre" Variant="Variant.Outlined" Margin="Margin.Dense">
-                            <MudSelectItem T="string" Value="@(null)">Nessuno</MudSelectItem>
+                    <MudItem xs="12" md="4" Class="mt-2">
+                        <MudSelect T="string" Label="Collection Profiles Padre" MultiSelection="true"
+                                   @bind-SelectedValues="_selectedParentColProfiles" Variant="Variant.Outlined" Margin="Margin.Dense">
                             @foreach (var profile in ObservableProvider.GetAllAvailableProfiles())
                             {
                                 <MudSelectItem Value="@profile.Id">@profile.Name</MudSelectItem>
                             }
                         </MudSelect>
                     </MudItem>
-                    <MudItem xs="12" md="6" Class="mt-2">
-                        <MudSelect T="string" @bind-Value="_model.ProfileSet.CheckProfileId" Label="Check Profile Padre" Variant="Variant.Outlined" Margin="Margin.Dense">
-                            <MudSelectItem T="string" Value="@(null)">Nessuno</MudSelectItem>
+                    <MudItem xs="12" md="4" Class="mt-2">
+                        <MudSelect T="string" Label="Check Profiles Padre" MultiSelection="true"
+                                   @bind-SelectedValues="_selectedParentCheckProfiles" Variant="Variant.Outlined" Margin="Margin.Dense">
                             @foreach (var check in CheckProvider.Checks)
                             {
                                 <MudSelectItem Value="@check.Id">@check.Name</MudSelectItem>
                             }
                         </MudSelect>
                     </MudItem>
+                    <MudItem xs="12" md="4" Class="mt-2">
+                        <MudSelect T="string" Label="Alert Profiles Padre" MultiSelection="true"
+                                   @bind-SelectedValues="_selectedParentAlertProfiles" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @* Aggiungere qui il loop se hai un AlertProvider, altrimenti placeholder *@
+                        </MudSelect>
+                    </MudItem>
 
-                    @* --- SEZIONE FIGLI (CHILDREN RULES) --- *@
+                    @* --- SEZIONE FIGLI --- *@
                     <MudItem xs="12" Class="mt-6">
                         <div class="d-flex align-center justify-space-between">
-                            <MudText Typo="Typo.subtitle1" Color="Color.Secondary"><b>Sotto-Regole (Children Profile Rules)</b></MudText>
+                            <MudText Typo="Typo.subtitle1" Color="Color.Secondary"><b>Sotto-Regole (Children)</b></MudText>
                             <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small" OnClick="AddChildRule">
                                 Aggiungi Regola Figlio
                             </MudButton>
@@ -106,7 +113,7 @@
                     @foreach (var child in _model.ChildrenProfileRules)
                     {
                         <MudItem xs="12">
-                            <MudPaper Outlined="true" Class="pa-4 mb-2" Style="border-left: 6px solid var(--mud-palette-secondary); background-color: var(--mud-palette-background-grey);">
+                            <MudPaper Outlined="true" Class="pa-4 mb-2" Style="border-left: 6px solid var(--mud-palette-secondary);">
                                 <div class="d-flex justify-end mb-2">
                                     <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Color="Color.Error" OnClick="@(() => _model.ChildrenProfileRules.Remove(child))" Size="Size.Small" />
                                 </div>
@@ -114,8 +121,7 @@
                                     <MudItem xs="12">
                                         <MudSelect T="ResourceTypes" Label="Tipi Risorsa Figlio"
                                                    MultiSelection="true"
-                                                   SelectedValues="_selectedChildTypesMap[child]" 
-                                                   SelectedValuesChanged="@(vals => OnChildTypesChanged(child, vals))"
+                                                   @bind-SelectedValues="_selectedChildTypesMap[child]"
                                                    Variant="Variant.Outlined" Margin="Margin.Dense">
                                             @foreach (ResourceTypes type in Enum.GetValues(typeof(ResourceTypes)))
                                             {
@@ -124,37 +130,27 @@
                                         </MudSelect>
                                     </MudItem>
 
-                                    <MudItem xs="12">
-                                        <div class="d-flex align-center justify-space-between mt-2">
-                                            <MudText Typo="Typo.caption"><b>Attributi Matching Figlio</b></MudText>
-                                            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="() => AddAttribute(child.MatchingRuleSet)">Aggiungi</MudButton>
-                                        </div>
-                                        @foreach (var attr in child.MatchingRuleSet.Attributes)
-                                        {
-                                            <div class="d-flex gap-2 mb-2">
-                                                <MudTextField @bind-Value="attr.Key" Label="Chiave" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                <MudTextField @bind-Value="attr.Value" Label="Valore" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => child.MatchingRuleSet.Attributes.Remove(attr))" Size="Size.Small" />
-                                            </div>
-                                        }
-                                    </MudItem>
-
-                                    <MudItem xs="12" md="6" Class="mt-2">
-                                        <MudSelect T="string" @bind-Value="child.ProfileSet.CollectionProfileId" Label="Collection Profile Figlio" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                            <MudSelectItem T="string" Value="@(null)">Eredita dal Padre</MudSelectItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudSelect T="string" Label="Collection Figlio" MultiSelection="true"
+                                                   @bind-SelectedValues="_selectedChildColProfilesMap[child]" Variant="Variant.Outlined" Margin="Margin.Dense">
                                             @foreach (var profile in ObservableProvider.GetAllAvailableProfiles())
                                             {
                                                 <MudSelectItem Value="@profile.Id">@profile.Name</MudSelectItem>
                                             }
                                         </MudSelect>
                                     </MudItem>
-                                    <MudItem xs="12" md="6" Class="mt-2">
-                                        <MudSelect T="string" @bind-Value="child.ProfileSet.CheckProfileId" Label="Check Profile Figlio" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                            <MudSelectItem T="string" Value="@(null)">Eredita dal Padre</MudSelectItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudSelect T="string" Label="Check Figlio" MultiSelection="true"
+                                                   @bind-SelectedValues="_selectedChildCheckProfilesMap[child]" Variant="Variant.Outlined" Margin="Margin.Dense">
                                             @foreach (var check in CheckProvider.Checks)
                                             {
                                                 <MudSelectItem Value="@check.Id">@check.Name</MudSelectItem>
                                             }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudSelect T="string" Label="Alert Figlio" MultiSelection="true"
+                                                   @bind-SelectedValues="_selectedChildAlertProfilesMap[child]" Variant="Variant.Outlined" Margin="Margin.Dense">
                                         </MudSelect>
                                     </MudItem>
                                 </MudGrid>
@@ -179,126 +175,100 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
-    [Parameter] public List<CollectionProfileDetailed> AvailableCollectionProfiles { get; set; } = new();
     [Parameter] public ProfileRuleItem? EntityToEdit { get; set; }
 
     private AddProfileRuleHttpRequest _model = new();
-    private IEnumerable<ResourceTypes> _selectedParentResourceTypes = new HashSet<ResourceTypes>();
 
-    // Dizionario per tracciare le selezioni Enum dei figli prima della conversione in stringhe
+    // MultiSelection Padre
+    private IEnumerable<ResourceTypes> _selectedParentResourceTypes = new HashSet<ResourceTypes>();
+    private IEnumerable<string> _selectedParentColProfiles = new HashSet<string>();
+    private IEnumerable<string> _selectedParentCheckProfiles = new HashSet<string>();
+    private IEnumerable<string> _selectedParentAlertProfiles = new HashSet<string>();
+
+    // MultiSelection Figli (Mappe di stato)
     private Dictionary<ChildProfileRule, IEnumerable<ResourceTypes>> _selectedChildTypesMap = new();
-    private bool _isEdit => EntityToEdit != null;
+    private Dictionary<ChildProfileRule, IEnumerable<string>> _selectedChildColProfilesMap = new();
+    private Dictionary<ChildProfileRule, IEnumerable<string>> _selectedChildCheckProfilesMap = new();
+    private Dictionary<ChildProfileRule, IEnumerable<string>> _selectedChildAlertProfilesMap = new();
+
     private bool _loading = false;
     private bool _isDataLoaded = false;
+    private bool _isEdit => EntityToEdit != null;
 
     protected override async Task OnInitializedAsync()
     {
-        _model.MatchingRuleSet = new MatchingRuleSet { Attributes = new List<AttributeRule>(), ResourceTypes = new List<string>() };
-        _model.ProfileSet = new ProfileSet();
-        _model.ChildrenProfileRules = new List<ChildProfileRule>();
-
         if (_isEdit)
         {
-            // Mappatura da Entity a Request Model
             _model.Name = EntityToEdit!.Name;
             _model.Order = EntityToEdit.Order;
-            _model.ProfileSet = EntityToEdit.ProfileSet;
-            _model.MatchingRuleSet = EntityToEdit.MatchingRuleSet;
-            _model.ChildrenProfileRules = EntityToEdit.ChildrenProfileRules;
+            _model.MatchingRuleSet = EntityToEdit.MatchingRuleSet ?? new();
+            _model.ProfileSet = EntityToEdit.ProfileSet ?? new();
+            _model.ChildrenProfileRules = EntityToEdit.ChildrenProfileRules ?? new();
 
-            // Pre-popolamento selezioni UI Padre
-            _selectedParentResourceTypes = _model.MatchingRuleSet.ResourceTypes
-                .Select(x => Enum.Parse<ResourceTypes>(x)).ToList();
+            // Sincronizzazione UI Padre
+            _selectedParentResourceTypes = _model.MatchingRuleSet.ResourceTypes?.Select(Enum.Parse<ResourceTypes>).ToHashSet() ?? new();
+            _selectedParentColProfiles = _model.ProfileSet.CollectionProfileIds?.ToHashSet() ?? new();
+            _selectedParentCheckProfiles = _model.ProfileSet.CheckProfileIds?.ToHashSet() ?? new();
+            _selectedParentAlertProfiles = _model.ProfileSet.AlertProfileIds?.ToHashSet() ?? new();
 
-            // Pre-popolamento selezioni UI Figli
+            // Sincronizzazione UI Figli
             foreach (var child in _model.ChildrenProfileRules)
             {
-                var types = child.MatchingRuleSet.ResourceTypes
-                    .Select(x => Enum.Parse<ResourceTypes>(x)).ToList();
-                _selectedChildTypesMap[child] = types;
+                _selectedChildTypesMap[child] = child.MatchingRuleSet.ResourceTypes?.Select(Enum.Parse<ResourceTypes>).ToHashSet() ?? new();
+                _selectedChildColProfilesMap[child] = child.ProfileSet.CollectionProfileIds?.ToHashSet() ?? new();
+                _selectedChildCheckProfilesMap[child] = child.ProfileSet.CheckProfileIds?.ToHashSet() ?? new();
+                _selectedChildAlertProfilesMap[child] = child.ProfileSet.AlertProfileIds?.ToHashSet() ?? new();
             }
         }
 
-        try
-        {
-            await Task.WhenAll(
-                ObservableProvider.InitializeAsync(),
-                CheckProvider.InitializeAsync()
-            );
-            _isDataLoaded = true;
-        }
-        catch (Exception)
-        {
-            Snackbar.Add("Errore nel caricamento delle sonde", Severity.Error);
-        }
+        await Task.WhenAll(ObservableProvider.InitializeAsync(), CheckProvider.InitializeAsync());
+        _isDataLoaded = true;
     }
 
     private void AddChildRule()
     {
-        var newChild = new ChildProfileRule
-        {
-            MatchingRuleSet = new MatchingRuleSet { ResourceTypes = new List<string>(), Attributes = new List<AttributeRule>() },
-            ProfileSet = new ProfileSet()
-        };
+        var newChild = new ChildProfileRule();
         _model.ChildrenProfileRules.Add(newChild);
-
-        // Inizializziamo il dizionario per questo nuovo figlio
         _selectedChildTypesMap[newChild] = new HashSet<ResourceTypes>();
-    }
-
-    private void OnChildTypesChanged(ChildProfileRule child, IEnumerable<ResourceTypes> selectedValues)
-    {
-        _selectedChildTypesMap[child] = selectedValues;
-
-        // Aggiorna direttamente il modello con i nomi stringa (es. "Wlc")
-        child.MatchingRuleSet.ResourceTypes = selectedValues
-            .Select(x => x.ToString())
-            .ToList();
+        _selectedChildColProfilesMap[newChild] = new HashSet<string>();
+        _selectedChildCheckProfilesMap[newChild] = new HashSet<string>();
+        _selectedChildAlertProfilesMap[newChild] = new HashSet<string>();
     }
 
     private void AddAttribute(MatchingRuleSet set)
     {
-        set.Attributes ??= new List<AttributeRule>();
+        set.Attributes ??= new();
         set.Attributes.Add(new AttributeRule());
     }
 
-    private void Cancel() => MudDialog.Cancel();
-
     private async Task Submit()
     {
-        if (string.IsNullOrWhiteSpace(_model.Name)) return;
-
+        _loading = true;
         try
         {
-            _loading = true;
-            StateHasChanged(); // Forza l'aggiornamento della UI prima della chiamata pesante
+            // Consolidamento dati Padre
+            _model.MatchingRuleSet.ResourceTypes = _selectedParentResourceTypes.Select(x => x.ToString()).ToList();
+            _model.ProfileSet.CollectionProfileIds = _selectedParentColProfiles.ToArray();
+            _model.ProfileSet.CheckProfileIds = _selectedParentCheckProfiles.ToArray();
+            _model.ProfileSet.AlertProfileIds = _selectedParentAlertProfiles.ToArray();
 
-            // Mappatura
-            _model.MatchingRuleSet.ResourceTypes = _selectedParentResourceTypes
-                .Select(x => x.ToString()).ToList();
-            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-            string json = System.Text.Json.JsonSerializer.Serialize(_model, options);
-            bool success;
-            if (_isEdit)
-                success = await ProfileRuleProvider.UpdateProfileRuleAsync(EntityToEdit!.Id, _model);
-            else
-                success = await ProfileRuleProvider.AddProfileRuleAsync(_model);
+            // Consolidamento dati Figli
+            foreach (var child in _model.ChildrenProfileRules)
+            {
+                child.MatchingRuleSet.ResourceTypes = _selectedChildTypesMap[child].Select(x => x.ToString()).ToList();
+                child.ProfileSet.CollectionProfileIds = _selectedChildColProfilesMap[child].ToArray();
+                child.ProfileSet.CheckProfileIds = _selectedChildCheckProfilesMap[child].ToArray();
+                child.ProfileSet.AlertProfileIds = _selectedChildAlertProfilesMap[child].ToArray();
+            }
 
-            if (success)
-                MudDialog.Close(DialogResult.Ok(true));
-            else
-                Snackbar.Add("Errore di comunicazione con l'API", Severity.Error);
+            bool success = _isEdit
+                ? await ProfileRuleProvider.UpdateProfileRuleAsync(EntityToEdit!.Id, _model)
+                : await ProfileRuleProvider.AddProfileRuleAsync(_model);
+
+            if (success) MudDialog.Close(DialogResult.Ok(true));
         }
-        catch (Exception ex)
-        {
-            // Se l'errore RemoteNavigationManager arriva qui, lo logghiamo meglio
-            Console.WriteLine($"Eccezione catturata nel Submit: {ex.Message}");
-            Snackbar.Add("Errore di inizializzazione del sistema di sicurezza. Riprova.", Severity.Warning);
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
+        finally { _loading = false; }
     }
+
+    private void Cancel() => MudDialog.Cancel();
 }

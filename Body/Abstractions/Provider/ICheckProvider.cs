@@ -1,4 +1,5 @@
-﻿using GlassBoard.Response.Get;
+﻿using GlassBoard.Request.Add;
+using GlassBoard.Response.Get;
 
 namespace GlassBoard.Abstractions.Provider
 {
@@ -9,5 +10,7 @@ namespace GlassBoard.Abstractions.Provider
         Task InitializeAsync(bool forceRefresh = false);
         CheckModel GetCheckById(string id);
         List<CheckModel> GetChecksByMetric(string metricName);
+
+        Task<string?> AddCheckAsync(AddCheckHttpRequest model);
     }
 }

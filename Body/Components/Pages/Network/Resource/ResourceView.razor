@@ -213,7 +213,7 @@ else
 
     private ResourceItem _resource;
     private List<AttributeItem> _attributeItems = new();
-    private List<ResourceAccesses.ResourceAccessItem> _accessItems = new();
+    private List<ResourceAccess> _accessItems = new();
     private bool _showAnalytics = false;
     private string _parentId, _tenantName, _orgName, _probeName, _namespace;
     private Dictionary<string, string> MetricNames;
@@ -257,33 +257,27 @@ else
 
         try
         {
-            // 1. Recupero risorsa e figli
+            // 1. Recupero risorsa (Il Service dovrebbe già usare il Mapper internamente)
             _resource = await InterfaceService.GetResourceWithChildren(Id);
 
             if (_resource != null)
             {
-                MapMetricNames(_resource.ResourceTypes.First());
+                if (_resource.ResourceTypes.Any())
+                    MapMetricNames(_resource.ResourceTypes.First());
 
-                //await FetchMetric("network.interface.band_width_out_rate", "Outbound (B/s)", token, from, to);
-                // 2. Caricamento dati correlati (Tenant, Probe e Provider)
+                // 2. Caricamento dati correlati
                 await LoadRelatedData();
 
-                // 3. Mapping Attributi
+                // 3. Mapping Attributi (Semplificato)
                 _attributeItems = _resource.ResourceAttributes?.Select(a => new AttributeItem
                 {
                     Key = a.Key ?? string.Empty,
                     Value = a.Value ?? string.Empty
                 }).ToList() ?? new List<AttributeItem>();
 
-                // 4. Mapping Accessi con l'Enum InstrumentTypes
-                _accessItems = _resource.ResourceAccesses?.Select(a => new ResourceAccesses.ResourceAccessItem
-                {
-                    Address = a.Address ?? "N/D",
-                    Instruments = a.Instruments?.Select(i =>
-                        Enum.TryParse<InstrumentTypes>(i, true, out var result) ? (int)result : 0
-                    ).ToList() ?? new List<int>(),
-                    AccessScopes = a.AccessScopes?.Select(s => int.TryParse(s, out var val) ? val : 0).ToList() ?? new List<int>()
-                }).ToList() ?? new List<ResourceAccesses.ResourceAccessItem>();
+                // 4. FIX ACCESSI: Non serve più il parsing in int o Enum qui.
+                // Il ResourceMapper ha già popolato ResourceAccesses correttamente come stringhe.
+                _accessItems = _resource.ResourceAccesses ?? new List<SharedLibrary.Models.ResourceAccess>();
             }
         }
         catch (Exception ex)

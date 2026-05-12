@@ -88,20 +88,42 @@
                     <MudPaper Class="pa-4" Elevation="4">
                         <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-4">1. Aggiungi Accesso IP</MudText>
                         <MudStack Spacing="3">
-                            <MudTextField @bind-Value="_tmpAddress" Label="IP Address" Variant="Variant.Outlined" />
-                            <MudSelect T="AccessScopeTypes" Label="Scopes" MultiSelection="true" @bind-SelectedValues="_tmpScopes" Variant="Variant.Outlined">
+                            <MudTextField @bind-Value="_tmpAddress" Label="IP Address" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+                            <MudSelect T="AccessScopeTypes" Label="Scopes" MultiSelection="true" @bind-SelectedValues="_tmpScopes" Variant="Variant.Outlined" Margin="Margin.Dense">
                                 @foreach (AccessScopeTypes item in Enum.GetValues(typeof(AccessScopeTypes)))
                                 {
                                     <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
                                 }
                             </MudSelect>
-                            <MudSelect T="InstrumentTypes" Label="Strumenti Attivi" MultiSelection="true" @bind-SelectedValues="_tmpInstruments" Variant="Variant.Outlined">
+
+                            <MudSelect T="InstrumentTypes" Label="Strumenti Attivi" MultiSelection="true" @bind-SelectedValues="_tmpInstruments" Variant="Variant.Outlined" Margin="Margin.Dense">
                                 @foreach (InstrumentTypes item in Enum.GetValues(typeof(InstrumentTypes)))
                                 {
                                     <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
                                 }
                             </MudSelect>
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAccess" FullWidth="true">Inserisci IP</MudButton>
+
+                            @* Campi Condizionali basati sulla selezione *@
+                            @if (_tmpInstruments.Contains(InstrumentTypes.Snmp))
+                            {
+                                <MudDivider Class="my-2" />
+                                <MudText Typo="Typo.caption">Configurazione SNMP</MudText>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudSelect T="string" Label="Versione" @bind-Value="_tmpSnmpVersion" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        <MudSelectItem Value="@("V1")">V1</MudSelectItem>
+                                        <MudSelectItem Value="@("V2c")">V2c</MudSelectItem>
+                                        <MudSelectItem Value="@("V3")">V3</MudSelectItem>
+                                    </MudSelect>
+                                    <MudNumericField @bind-Value="_tmpPort" Label="Porta" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudStack>
+                            }
+
+                            <MudNumericField @bind-Value="_tmpTimeout" Label="Timeout (sec)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="60" />
+
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAccess" FullWidth="true" Class="mt-2">
+                                Inserisci IP
+                            </MudButton>
                         </MudStack>
                     </MudPaper>
                 </MudItem>
@@ -116,8 +138,30 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd>@context.Address</MudTd>
-                            <MudTd>@string.Join(", ", context.AccessScopes)</MudTd> @* Già stringhe *@
-                            <MudTd>@string.Join(", ", context.Instruments)</MudTd>  @* Già stringhe *@
+                            <MudTd DataLabel="Scopes">
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var scope in context.AccessScopes)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                            @FormatTechnicalName(scope)
+                                        </MudChip>
+                                    }
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="Instruments">
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var inst in context.Instruments)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary">
+                                            @FormatTechnicalName(inst.InstrumentType)
+                                            @if (!string.IsNullOrEmpty(inst.SnmpVersion))
+                                            {
+                                                <span class="ml-1" style="font-size: 0.7rem;">(@inst.SnmpVersion)</span>
+                                            }
+                                        </MudChip>
+                                    }
+                                </div>
+                            </MudTd>
                             <MudTd>
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                Color="Color.Error"
@@ -143,6 +187,10 @@
     private bool _isProcessing = false;
     private string _selectedNamespace;
 
+    private string _tmpSnmpVersion = "V2c";
+    private int _tmpPort = 161;
+    private int _tmpTimeout = 5;
+
     // Liste filtrate per la UI
     private List<CollectionProfileDetailed> _filteredProfiles = new();
     private List<ProbeItemResponse> _availableProbes = new();
@@ -155,6 +203,23 @@
     private string _tmpAddress = "";
     private IEnumerable<AccessScopeTypes> _tmpScopes = new HashSet<AccessScopeTypes>() { AccessScopeTypes.MonitoringService };
     private IEnumerable<InstrumentTypes> _tmpInstruments = new HashSet<InstrumentTypes>();
+
+    private string FormatTechnicalName(string technicalName)
+    {
+        if (string.IsNullOrWhiteSpace(technicalName)) return "N/D";
+
+        // Eseguiamo una mappatura manuale per i casi noti
+        return technicalName switch
+        {
+            "MonitoringService" => "Monitoring Service",
+            "ConfigurationService" => "Configuration Service",
+            "Snmp" => "SNMP",
+            "Ssh" => "SSH",
+            "Http" => "HTTP",
+            "Https" => "HTTPS",
+            _ => System.Text.RegularExpressions.Regex.Replace(technicalName, "([a-z])([A-Z])", "$1 $2")
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -217,40 +282,50 @@
     private void AddAccess()
     {
         if (string.IsNullOrWhiteSpace(_tmpAddress)) return;
-        _model.ResourceAccesses.Add(new ResourceAccessItem
+
+        var newAccess = new ResourceAccessItem
         {
             Address = _tmpAddress,
-            // CAMBIO QUI: passiamo la stringa dell'enum
             AccessScopes = _tmpScopes.Select(s => s.ToString()).ToList(),
-            Instruments = _tmpInstruments.Select(i => i.ToString()).ToList()
-        });
+            // Creiamo gli oggetti InstrumentItem invece di semplici stringhe
+            Instruments = _tmpInstruments.Select(i => new ResourceInstrumentItem
+            {
+                InstrumentType = i.ToString(),
+                SnmpVersion = i == InstrumentTypes.Snmp ? "V2c" : null,
+                TimeoutSeconds = 5,
+                ShouldLock = false
+            }).ToList()
+        };
+
+        _model.ResourceAccesses.Add(newAccess);
         SyncInstrumentConfigs();
         _tmpAddress = "";
     }
 
     private void SyncInstrumentConfigs()
     {
-        // Ora lavoriamo con stringhe
+        // Estraiamo i tipi unici dagli oggetti instrument
         var distinctInstrumentNames = _model.ResourceAccesses
             .SelectMany(a => a.Instruments)
+            .Select(i => i.InstrumentType)
             .Distinct()
             .ToList();
 
-        // Rimuoviamo le config non più presenti (confronto tra stringhe)
+        // Rimuoviamo configurazioni obsolete
         _model.InstrumentConfigurations.RemoveAll(c => !distinctInstrumentNames.Contains(c.Instrument));
 
-        foreach (var instrumentName in distinctInstrumentNames)
+        foreach (var name in distinctInstrumentNames)
         {
-            if (!_model.InstrumentConfigurations.Any(c => c.Instrument == instrumentName))
+            if (!_model.InstrumentConfigurations.Any(c => c.Instrument == name))
             {
-                // Proviamo a recuperare l'ID numerico dall'enum solo se serve per campi tecnici
-                if (Enum.TryParse<InstrumentTypes>(instrumentName, out var type))
+                if (Enum.TryParse<InstrumentTypes>(name, out var type))
                 {
                     _model.InstrumentConfigurations.Add(new InstrumentConfigItem
                     {
-                        InstrumentId = (int)type, // Se il backend vuole ancora l'ID qui
-                        Instrument = instrumentName,
-                        Port = type == InstrumentTypes.Snmp ? 161 : 0
+                        Instrument = name,
+                        SnmpVersion = "V2c",
+                        Port = type == InstrumentTypes.Snmp ? 161 : 0,
+                        ConnTimeoutSeconds = 5
                     });
                 }
             }

@@ -165,6 +165,8 @@ namespace SharedLibrary.Enum
             Lun = 44,
             Aggregate = 45,
             BgpPeer = 46,
+            VLan = 47,
+            SSID = 48,
         }
 
     }
@@ -291,5 +293,13 @@ namespace SharedLibrary.Enum
         Single = 1,
         TimeRange = 2,
         Count = 3
+    }
+
+    public enum InputTypes
+    {
+        Metric,
+        Log,
+        Trace,
+        Custom
     }
 }
